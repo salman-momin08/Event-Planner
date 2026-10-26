@@ -59,10 +59,15 @@ def _sha256(value: str) -> str:
     return hashlib.sha256(value.encode()).hexdigest()
 
 
+def _pseudonymize_ip(ctx: Context, ip: str) -> str:
+    """Keyed HMAC so a DB leak cannot brute-force the small IPv4 space back to a real address."""
+    return hmac.new(ctx.settings.security_log_key, ip.encode(), hashlib.sha256).hexdigest()[:16]
+
+
 def record_security_event(ctx: Context, user_id: int | None, event_type: str, ip: str | None) -> None:
     ctx.db.execute(
         "INSERT INTO security_events (at, user_id, type, ip_hash) VALUES (?, ?, ?, ?)",
-        (ctx.clock().isoformat(), user_id, event_type, _sha256(ip)[:16] if ip else None),
+        (ctx.clock().isoformat(), user_id, event_type, _pseudonymize_ip(ctx, ip) if ip else None),
     )
 
 

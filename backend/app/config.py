@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import secrets
 from collections.abc import Mapping
 from dataclasses import dataclass
 from urllib.parse import urlparse
@@ -40,6 +41,7 @@ class Settings:
     hsts: bool
     trust_proxy: bool
     session_ttl_seconds: int
+    security_log_key: bytes
     ai: AiSettings
     warnings: tuple[str, ...] = ()
 
@@ -92,6 +94,15 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
     if production and not cookie_secure:
         warnings.append("COOKIE_SECURE is false in production")
 
+    # Keys the HMAC that pseudonymises client IPs in the audit log; kept out of the database so a
+    # DB leak cannot reverse the small IPv4 space. A random per-process key is used when unset.
+    raw_log_key = env.get("SECURITY_LOG_KEY", "")
+    security_log_key = raw_log_key.encode()
+    if not security_log_key:
+        if production:
+            warnings.append("SECURITY_LOG_KEY is not set; audit-log IP pseudonyms will not persist across restarts")
+        security_log_key = secrets.token_bytes(32)
+
     token = env.get("HF_TOKEN") or env.get("HUGGINGFACEHUB_API_TOKEN") or ""
     model_id = env.get("HF_MODEL_ID", "")
     endpoint_url = _endpoint(env.get("HF_ENDPOINT_URL", ""))
@@ -118,6 +129,7 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
         hsts=production,
         trust_proxy=_bool(env, "TRUST_PROXY", False),
         session_ttl_seconds=_int(env, "SESSION_TTL_HOURS", 168, 1, 24 * 90) * 3600,
+        security_log_key=security_log_key,
         ai=ai,
         warnings=tuple(warnings),
     )
