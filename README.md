@@ -25,8 +25,23 @@ copy backend\.env.example backend\.env   # then edit; leave HF_TOKEN empty to ru
 cd backend
 ..\.venv\Scripts\python -m app           # http://127.0.0.1:3000
 cd ..
-.\.venv\Scripts\python -m pytest         # run from the repository root
+.\.venv\Scripts\python -m pytest         # backend API + AI workflow + static checks
 ```
+
+## Tests and checks
+
+```powershell
+.\.venv\Scripts\python -m pytest          # Python suite (API, AI workflow, static frontend checks)
+npm run test:unit                         # Vitest + jsdom: dom.js helpers, XSS safety, form validation
+npm run test:a11y                         # Playwright + axe-core: WCAG 2.2 AA on the real rendered UI
+npm run lint && npm run format            # ESLint + Prettier (frontend)
+pip-audit -r backend\requirements.txt     # backend dependency audit
+npm audit                                 # frontend dependency audit
+```
+
+`test:a11y` installs browsers once with `npx playwright install chromium` and boots the backend itself
+with an ephemeral SQLite database. Set `HF_TOKEN` (+ `HF_MODEL_ID`) to also run the opt-in live-model
+test in `tests/test_ai_live.py`, which is skipped otherwise.
 
 ## Enable the AI assistant
 1. Create a Hugging Face access token (read / Inference Providers permission).

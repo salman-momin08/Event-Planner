@@ -13,5 +13,11 @@ __pycache__/
 *.log
 *.tmp
 
+# Playwright (accessibility suite)
+test-results/
+playwright-report/
+blob-report/
+.playwright/
+
 # Internal project documentation
 .agents/
