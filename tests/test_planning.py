@@ -213,3 +213,34 @@ def test_per_event_limits(setup):
         assert c.post(f"{base}/vendors", {"name": f"v{i}"}).status == 201
     r = c.post(f"{base}/vendors", {"name": "one too many"})
     assert r.status == 409 and r.json["error"]["code"] == "limit_reached"
+
+
+def test_event_date_change_shifts_dated_tasks(setup):
+    app, c, ev, base = setup(eventDate="2027-06-10")
+    t1 = c.post(f"{base}/tasks", {"title": "Dated task", "dueDate": "2027-05-01"}).json
+    t2 = c.post(f"{base}/tasks", {"title": "Undated task"}).json
+
+    # Moving eventDate forward by 10 days shifts dated tasks forward by 10 days
+    c.patch(base, {"eventDate": "2027-06-20"})
+    tasks = {t["id"]: t for t in c.get(f"{base}/tasks").json}
+    assert tasks[t1["id"]]["dueDate"] == "2027-05-11"
+    assert tasks[t2["id"]]["dueDate"] is None
+
+    # Opting out via shiftTaskDates=False leaves task dates unchanged
+    c.patch(base, {"eventDate": "2027-07-01", "shiftTaskDates": False})
+    tasks = {t["id"]: t for t in c.get(f"{base}/tasks").json}
+    assert tasks[t1["id"]]["dueDate"] == "2027-05-11"
+
+
+def test_template_timeline_dependencies(setup):
+    app, c, ev, base = setup(type="birthday", eventDate="2026-12-01")
+    assert c.post(f"{base}/timeline/generate-template").status == 200
+    by = {t["title"]: t for t in c.get(f"{base}/tasks").json}
+    assert by["Choose date and venue"]["id"] in by["Send invitations"]["dependsOn"]
+    assert by["Send invitations"]["blocked"] is True
+
+    # Completing the prerequisite unblocks the dependent task
+    c.patch(f"{base}/tasks/{by['Set budget and guest list']['id']}", {"status": "done"})
+    c.patch(f"{base}/tasks/{by['Choose date and venue']['id']}", {"status": "done"})
+    by_after = {t["title"]: t for t in c.get(f"{base}/tasks").json}
+    assert by_after["Send invitations"]["blocked"] is False

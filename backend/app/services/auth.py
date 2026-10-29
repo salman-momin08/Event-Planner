@@ -7,11 +7,14 @@ import os
 import secrets
 import sqlite3
 from base64 import b64decode, b64encode
+from datetime import timedelta
 
 from ..context import Context
-from ..db import is_unique_violation
-from ..errors import ApiError, conflict
-from ..schemas import LoginIn, RegisterIn
+from ..db import is_unique_violation, transaction
+from ..errors import ApiError, bad_request, conflict
+from ..schemas import ChangePasswordIn, LoginIn, RegisterIn
+
+SECURITY_EVENT_RETENTION_DAYS = 90
 
 _N, _R, _P, _KEYLEN = 32768, 8, 1, 64
 _MAXMEM = 128 * 1024 * 1024
@@ -64,7 +67,18 @@ def _pseudonymize_ip(ctx: Context, ip: str) -> str:
     return hmac.new(ctx.settings.security_log_key, ip.encode(), hashlib.sha256).hexdigest()[:16]
 
 
+def purge_security_events(ctx: Context, retention_days: int = SECURITY_EVENT_RETENTION_DAYS) -> int:
+    """Purges security_events older than retention_days (TD-004) and expired sessions."""
+    cutoff = (ctx.clock() - timedelta(days=retention_days)).isoformat()
+    now_ms = int(ctx.clock().timestamp() * 1000)
+    ctx.db.execute("DELETE FROM sessions WHERE expires_at <= ?", (now_ms,))
+    cur = ctx.db.execute("DELETE FROM security_events WHERE at < ?", (cutoff,))
+    return cur.rowcount
+
+
 def record_security_event(ctx: Context, user_id: int | None, event_type: str, ip: str | None) -> None:
+    cutoff = (ctx.clock() - timedelta(days=SECURITY_EVENT_RETENTION_DAYS)).isoformat()
+    ctx.db.execute("DELETE FROM security_events WHERE at < ?", (cutoff,))
     ctx.db.execute(
         "INSERT INTO security_events (at, user_id, type, ip_hash) VALUES (?, ?, ?, ?)",
         (ctx.clock().isoformat(), user_id, event_type, _pseudonymize_ip(ctx, ip) if ip else None),
@@ -132,6 +146,22 @@ def session_user(ctx: Context, token: str | None) -> dict | None:
 def logout(ctx: Context, token: str, user_id: int, ip: str) -> None:
     ctx.db.execute("DELETE FROM sessions WHERE token_hash = ?", (_sha256(token),))
     record_security_event(ctx, user_id, "logout", ip)
+
+
+async def change_password(ctx: Context, user: dict, body: ChangePasswordIn, ip: str) -> str:
+    row = ctx.db.execute("SELECT password_hash FROM users WHERE id = ?", (user["id"],)).fetchone()
+    if row is None or not await verify_password(body.currentPassword, row["password_hash"]):
+        record_security_event(ctx, user["id"], "password_change_failed", ip)
+        raise ApiError(401, "invalid_credentials", "Invalid current password")
+    if body.newPassword == body.currentPassword:
+        raise bad_request({"newPassword": "New password must be different from your current password"})
+    new_hash = await hash_password(body.newPassword)
+    with transaction(ctx.db):
+        ctx.db.execute("UPDATE users SET password_hash = ? WHERE id = ?", (new_hash, user["id"]))
+        ctx.db.execute("DELETE FROM sessions WHERE user_id = ?", (user["id"],))
+        token = _create_session(ctx, user["id"])
+        record_security_event(ctx, user["id"], "password_changed", ip)
+    return token
 
 
 async def delete_account(ctx: Context, user: dict, password: str, ip: str) -> None:

@@ -47,11 +47,10 @@ async def delete_event(event: sqlite3.Row = Depends(owned_event), ctx: Context =
 
 @router.get("/{event_id:int}/summary")
 async def summary(event: sqlite3.Row = Depends(owned_event), ctx: Context = Depends(get_ctx)):
-    vendor_list = vendors.list_vendors(ctx, event["id"])
     return {
         "budget": budget.summarize(ctx, event),
         "tasks": tasks.task_stats(ctx, event["id"]),
-        "vendors": {"total": len(vendor_list), "booked": sum(v["status"] == "booked" for v in vendor_list)},
+        "vendors": vendors.vendor_stats(ctx, event["id"]),
     }
 
 

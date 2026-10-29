@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends
 from ..ai import plans
 from ..context import Context
 from ..deps import get_ctx, owned_event, require_user
-from ..schemas import PlanRequest
+from ..schemas import PlanApplyIn, PlanRequest
 
 router = APIRouter()
 
@@ -38,8 +38,13 @@ async def get_plan(plan_id: int, event: sqlite3.Row = Depends(owned_event), ctx:
 
 
 @router.post("/events/{event_id:int}/ai/plans/{plan_id:int}/apply")
-async def apply_plan(plan_id: int, event: sqlite3.Row = Depends(owned_event), ctx: Context = Depends(get_ctx)):
-    return plans.apply_plan(ctx, event, plan_id)
+async def apply_plan(
+    plan_id: int,
+    body: PlanApplyIn | None = None,
+    event: sqlite3.Row = Depends(owned_event),
+    ctx: Context = Depends(get_ctx),
+):
+    return plans.apply_plan(ctx, event, plan_id, body)
 
 
 @router.post("/events/{event_id:int}/ai/plans/{plan_id:int}/discard")

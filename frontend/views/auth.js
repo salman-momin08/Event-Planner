@@ -1,5 +1,5 @@
 import { api, post } from '../api.js';
-import { confirmAction, formView, h } from '../dom.js';
+import { announce, confirmAction, formView, h } from '../dom.js';
 
 export function authView({ mode, onAuthenticated }) {
   const register = mode === 'register';
@@ -42,11 +42,43 @@ export function authView({ mode, onAuthenticated }) {
 }
 
 export function accountView({ user, onDeleted }) {
+  const passwordForm = formView({
+    fields: [
+      {
+        name: 'currentPassword',
+        label: 'Current password',
+        kind: 'password',
+        required: true,
+        autocomplete: 'current-password',
+      },
+      {
+        name: 'newPassword',
+        label: 'New password',
+        kind: 'password',
+        required: true,
+        autocomplete: 'new-password',
+        hint: 'At least 12 characters. Changing your password signs out other sessions.',
+      },
+    ],
+    submitLabel: 'Update password',
+    onSubmit: async (values) => {
+      await post('/auth/password', values);
+      passwordForm.reset();
+      announce('Your password has been updated.');
+    },
+  });
   const form = formView({
     fields: [{ name: 'password', label: 'Confirm your password to delete', kind: 'password', required: true, autocomplete: 'current-password' }],
     submitLabel: 'Delete my account and all data',
     onSubmit: async (values) => {
-      if (!confirmAction('Permanently delete your account and all events? This cannot be undone.')) return;
+      if (
+        !(await confirmAction('Permanently delete your account and all events? This cannot be undone.', {
+          title: 'Delete account',
+          confirmLabel: 'Delete account',
+          variant: 'danger',
+        }))
+      )
+        return;
       await api('DELETE', '/auth/me', values);
       await onDeleted();
     },
@@ -58,6 +90,8 @@ export function accountView({ user, onDeleted }) {
       { class: 'narrow' },
       h('h1', null, 'Account'),
       h('dl', { class: 'facts' }, h('dt', null, 'Name'), h('dd', null, user.displayName), h('dt', null, 'Email'), h('dd', null, user.email)),
+      h('h2', null, 'Change password'),
+      passwordForm,
       h('h2', null, 'Delete account'),
       h('p', null, 'This removes your account, events, budgets, tasks, vendors and AI drafts. Backups may retain data until they rotate.'),
       form,

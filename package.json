@@ -1,0 +1,30 @@
+{
+  "name": "event-planning-assistant",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Frontend tooling for the Event Planning Assistant (framework-free ES modules served by the FastAPI backend).",
+  "type": "module",
+  "engines": {
+    "node": ">=20.19"
+  },
+  "scripts": {
+    "dev": "concurrently -k -n backend,frontend -c blue,green \"npm:dev:backend\" \"npm:dev:frontend\"",
+    "dev:backend": "cd backend && ..\\.venv\\Scripts\\python.exe -m app",
+    "dev:frontend": "vite",
+    "lint": "eslint frontend",
+    "lint:fix": "eslint frontend --fix",
+    "format": "prettier --check \"frontend/**/*.{js,css,html}\"",
+    "format:fix": "prettier --write \"frontend/**/*.{js,css,html}\"",
+    "setup:backend": "python -m pip install -r backend/requirements-dev.txt",
+    "setup": "npm install && npm run setup:backend",
+    "test": "python -m pytest"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.0.0",
+    "concurrently": "^9.0.0",
+    "eslint": "^9.0.0",
+    "globals": "^15.0.0",
+    "prettier": "^3.0.0",
+    "vite": "^8.3.5"
+  }
+}

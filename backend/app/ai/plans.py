@@ -9,10 +9,12 @@ from ..dates import add_days, to_date_string
 from ..db import transaction
 from ..errors import ApiError, bad_request, conflict, limit_reached, not_found
 from ..money import percent_to_cents
-from ..schemas import PlanRequest
+from ..schemas import PlanApplyIn, PlanRequest
 from ..security import enforce
+from ..services.auth import record_security_event
 from ..services.budget import LIMITS as BUDGET_LIMITS
 from ..services.tasks import LIMITS as TASK_LIMITS
+from ..services.vendors import MAX_VENDORS
 from .graph import run_plan_graph
 from .prompts import PROMPT_VERSION, build_context, context_json
 
@@ -65,8 +67,14 @@ async def create_draft(ctx: Context, user: dict, event: sqlite3.Row, body: PlanR
     if n >= MAX_PLANS_PER_EVENT:
         raise limit_reached(f"An event can keep at most {MAX_PLANS_PER_EVENT} AI drafts; discard some first")
 
-    enforce(ctx.limiters["ai_minute"], f"ai:{user['id']}", "AI requests are limited to a few per minute")
-    enforce(ctx.limiters["ai_daily"], f"ai:{user['id']}", "Daily AI request limit reached")
+    try:
+        enforce(ctx.limiters["ai_minute"], f"ai:{user['id']}", "AI requests are limited to a few per minute")
+        enforce(ctx.limiters["ai_daily"], f"ai:{user['id']}", "Daily AI request limit reached")
+    except ApiError as err:
+        if err.status == 429:
+            record_security_event(ctx, user["id"], "ai_rate_limited", None)
+            ctx.logger.warn("ai_rate_limited", userId=user["id"])
+        raise
 
     started = time.monotonic()
     outcome = "ok"
@@ -104,7 +112,7 @@ def discard_plan(ctx: Context, event_id: int, plan_id: int) -> dict:
     return get_plan(ctx, event_id, plan_id)
 
 
-def apply_plan(ctx: Context, event: sqlite3.Row, plan_id: int) -> dict:
+def apply_plan(ctx: Context, event: sqlite3.Row, plan_id: int, body: PlanApplyIn | None = None) -> dict:
     """Applies a draft with deterministic arithmetic: the model only supplied percentages and day offsets."""
     with transaction(ctx.db):
         row = _row(ctx, event["id"], plan_id)
@@ -112,17 +120,48 @@ def apply_plan(ctx: Context, event: sqlite3.Row, plan_id: int) -> dict:
             raise conflict("This plan has already been applied or discarded", "not_a_draft")
         plan = json.loads(row["plan_json"])
 
+        selected_cats = plan["budgetAllocations"]
+        if body is not None and body.categories is not None:
+            allowed_cats = {c.lower() for c in body.categories}
+            selected_cats = [b for b in selected_cats if b["category"].lower() in allowed_cats]
+
+        selected_tasks = plan["tasks"]
+        if body is not None and body.tasks is not None:
+            allowed_tasks = {t.lower() for t in body.tasks}
+            selected_tasks = [t for t in selected_tasks if t["title"].lower() in allowed_tasks]
+
         existing_cats = {
             r["name"].lower() for r in ctx.db.execute("SELECT name FROM budget_categories WHERE event_id = ?", (event["id"],))
         }
-        existing_tasks = {
-            r["title"].lower() for r in ctx.db.execute("SELECT title FROM tasks WHERE event_id = ?", (event["id"],))
-        }
-        new_cats = [b for b in plan["budgetAllocations"] if b["category"].lower() not in existing_cats]
-        new_tasks = [t for t in plan["tasks"] if t["title"].lower() not in existing_tasks]
+        existing_task_rows = ctx.db.execute("SELECT id, title FROM tasks WHERE event_id = ?", (event["id"],)).fetchall()
+        task_id_by_title = {r["title"].lower(): int(r["id"]) for r in existing_task_rows}
+        existing_tasks = set(task_id_by_title)
+
+        new_cats = [b for b in selected_cats if b["category"].lower() not in existing_cats]
+        new_tasks = [t for t in selected_tasks if t["title"].lower() not in existing_tasks]
+
+        include_vendors = bool(body and body.includeVendors)
+        new_vendors: list[dict] = []
+        existing_vendor_count = 0
+        if include_vendors:
+            vendor_rows = ctx.db.execute(
+                "SELECT name, category FROM vendors WHERE event_id = ?", (event["id"],)
+            ).fetchall()
+            existing_vendor_count = len(vendor_rows)
+            existing_vendor_cats = {r["category"].lower() for r in vendor_rows if r["category"]}
+            existing_vendor_names = {r["name"].lower() for r in vendor_rows}
+            for v in plan.get("vendorSuggestions", []):
+                v_cat = v["category"].strip()
+                v_name = f"{v_cat} (shortlist)"[:80]
+                if v_cat.lower() not in existing_vendor_cats and v_name.lower() not in existing_vendor_names:
+                    new_vendors.append({"name": v_name, "category": v_cat, "contact": v["guidance"]})
+                    existing_vendor_cats.add(v_cat.lower())
+                    existing_vendor_names.add(v_name.lower())
+
         if (
             len(existing_cats) + len(new_cats) > BUDGET_LIMITS["categories"]
             or len(existing_tasks) + len(new_tasks) > TASK_LIMITS["tasks"]
+            or existing_vendor_count + len(new_vendors) > MAX_VENDORS
         ):
             raise limit_reached("Applying this plan would exceed the per-event limits")
 
@@ -132,22 +171,46 @@ def apply_plan(ctx: Context, event: sqlite3.Row, plan_id: int) -> dict:
                 (event["id"], b["category"], percent_to_cents(event["budget_cents"], b["percent"])),
             )
         ts = ctx.clock().isoformat()
+        pending_deps: list[tuple[int, list[str]]] = []
         for t in new_tasks:
-            ctx.db.execute(
+            cur = ctx.db.execute(
                 """INSERT INTO tasks (event_id, title, description, due_date, status, category, source,
                                       created_at, updated_at)
                    VALUES (?, ?, ?, ?, 'todo', ?, 'ai', ?, ?)""",
                 (event["id"], t["title"], t["description"], add_days(event["event_date"], -t["daysBeforeEvent"]),
                  t["category"], ts, ts),
             )
+            tid = int(cur.lastrowid)
+            task_id_by_title[t["title"].lower()] = tid
+            if t.get("dependsOn"):
+                pending_deps.append((tid, t["dependsOn"]))
+
+        for tid, dep_titles in pending_deps:
+            for dep_title in dep_titles:
+                prereq_id = task_id_by_title.get(dep_title.lower())
+                if prereq_id is not None and prereq_id != tid:
+                    ctx.db.execute(
+                        "INSERT OR IGNORE INTO task_dependencies (task_id, depends_on_id) VALUES (?, ?)",
+                        (tid, prereq_id),
+                    )
+
+        for v in new_vendors:
+            ctx.db.execute(
+                "INSERT INTO vendors (event_id, name, category, status, quote_cents, contact) VALUES (?, ?, ?, 'researching', NULL, ?)",
+                (event["id"], v["name"], v["category"], v["contact"]),
+            )
+
         ctx.db.execute("UPDATE ai_plan_versions SET status = 'applied' WHERE id = ? AND event_id = ?", (plan_id, event["id"]))
         allocated = ctx.db.execute(
             "SELECT COALESCE(SUM(planned_cents), 0) AS a FROM budget_categories WHERE event_id = ?", (event["id"],)
         ).fetchone()["a"]
-    return {
+    result = {
         "categoriesCreated": len(new_cats),
-        "categoriesSkipped": len(plan["budgetAllocations"]) - len(new_cats),
+        "categoriesSkipped": len(selected_cats) - len(new_cats),
         "tasksCreated": len(new_tasks),
-        "tasksSkipped": len(plan["tasks"]) - len(new_tasks),
+        "tasksSkipped": len(selected_tasks) - len(new_tasks),
         "unallocatedCents": event["budget_cents"] - allocated,
     }
+    if include_vendors:
+        result["vendorsCreated"] = len(new_vendors)
+    return result

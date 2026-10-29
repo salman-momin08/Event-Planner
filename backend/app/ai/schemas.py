@@ -69,6 +69,7 @@ class PlanTask(_Model):
     description: _ai_text(300, optional=True) = ""
     category: _ai_text(80, optional=True) = ""
     daysBeforeEvent: Annotated[int, BeforeValidator(_whole), Field(ge=0, le=730)]
+    dependsOn: Annotated[list[_ai_text(120)], Field(max_length=10)] = []
 
 
 class VendorSuggestion(_Model):
@@ -95,6 +96,31 @@ class Plan(_Model):
             lowered = [v.lower() for v in values]
             if len(set(lowered)) != len(lowered):
                 raise ValueError(f"{label} contain duplicates")
+        by_title = {t.title.lower(): t for t in self.tasks}
+        graph: dict[str, list[str]] = {}
+        for t in self.tasks:
+            key = t.title.lower()
+            deps: list[str] = []
+            for dep in t.dependsOn:
+                dep_key = dep.lower()
+                if dep_key == key:
+                    raise ValueError(f"task '{t.title}' cannot depend on itself")
+                if dep_key not in by_title:
+                    raise ValueError(f"task dependency '{dep}' does not match any task title in the plan")
+                if dep_key not in deps:
+                    deps.append(dep_key)
+            graph[key] = deps
+        for start in graph:
+            seen: set[str] = set()
+            stack = list(graph[start])
+            while stack:
+                cur = stack.pop()
+                if cur == start:
+                    raise ValueError("task dependencies must not form a cycle")
+                if cur in seen:
+                    continue
+                seen.add(cur)
+                stack.extend(graph.get(cur, []))
         return self
 
 
@@ -111,4 +137,7 @@ def validate_plan(raw: Any) -> dict:
     dumped = plan.model_dump()
     for b in dumped["budgetAllocations"]:
         b["percent"] = round(b["percent"], 2)
+    for t in dumped["tasks"]:
+        if not t.get("dependsOn"):
+            t.pop("dependsOn", None)
     return dumped

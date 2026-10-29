@@ -59,3 +59,11 @@ def update_vendor(ctx: Context, event_id: int, vendor_id: int, body: VendorPatch
 def delete_vendor(ctx: Context, event_id: int, vendor_id: int) -> None:
     _get(ctx, event_id, vendor_id)
     ctx.db.execute("DELETE FROM vendors WHERE id = ? AND event_id = ?", (vendor_id, event_id))
+
+
+def vendor_stats(ctx: Context, event_id: int) -> dict:
+    row = ctx.db.execute(
+        "SELECT COUNT(*) AS total, COALESCE(SUM(status = 'booked'), 0) AS booked FROM vendors WHERE event_id = ?",
+        (event_id,),
+    ).fetchone()
+    return {"total": row["total"], "booked": row["booked"]}

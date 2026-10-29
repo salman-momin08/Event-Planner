@@ -3,7 +3,8 @@ from __future__ import annotations
 import sqlite3
 
 from ..context import Context
-from ..db import update_row
+from ..dates import add_days, days_between
+from ..db import transaction, update_row
 from ..errors import not_found
 from ..schemas import EventIn, EventPatch
 
@@ -67,12 +68,28 @@ def list_events(ctx: Context, user_id: int, limit: int, offset: int) -> list[dic
 
 
 def update_event(ctx: Context, user_id: int, event_id: int, body: EventPatch) -> dict:
-    require_event(ctx, user_id, event_id)
-    update_row(ctx.db, "events", COLUMNS, body.model_dump(exclude_unset=True), "id = ? AND owner_id = ?", (event_id, user_id))
-    ctx.db.execute(
-        "UPDATE events SET updated_at = ? WHERE id = ? AND owner_id = ?",
-        (ctx.clock().isoformat(), event_id, user_id),
-    )
+    existing = require_event(ctx, user_id, event_id)
+    data = body.model_dump(exclude_unset=True)
+    shift_dates = data.pop("shiftTaskDates", True)
+    ts = ctx.clock().isoformat()
+    with transaction(ctx.db):
+        update_row(ctx.db, "events", COLUMNS, data, "id = ? AND owner_id = ?", (event_id, user_id))
+        ctx.db.execute(
+            "UPDATE events SET updated_at = ? WHERE id = ? AND owner_id = ?",
+            (ts, event_id, user_id),
+        )
+        if shift_dates and "eventDate" in data and data["eventDate"] != existing["event_date"]:
+            delta = days_between(existing["event_date"], data["eventDate"])
+            if delta != 0:
+                rows = ctx.db.execute(
+                    "SELECT id, due_date FROM tasks WHERE event_id = ? AND due_date IS NOT NULL",
+                    (event_id,),
+                ).fetchall()
+                for r in rows:
+                    ctx.db.execute(
+                        "UPDATE tasks SET due_date = ?, updated_at = ? WHERE id = ? AND event_id = ?",
+                        (add_days(r["due_date"], delta), ts, r["id"], event_id),
+                    )
     return to_event(require_event(ctx, user_id, event_id))
 
 

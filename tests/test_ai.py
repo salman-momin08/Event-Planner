@@ -241,3 +241,76 @@ def test_hf_factory_disables_tracing_and_requires_no_network(monkeypatch):
     import os
 
     assert os.environ["LANGSMITH_TRACING"] == "false" and os.environ["LANGCHAIN_TRACING_V2"] == "false"
+
+
+def test_selective_apply_vendor_seeding_and_ai_task_dependencies(make_app):
+    plan_with_deps = valid_plan()
+    plan_with_deps["tasks"][1]["dependsOn"] = ["Book venue"]
+    plan_with_deps["vendorSuggestions"] = [
+        {"category": "Catering", "guidance": "Ask about dietary options."},
+        {"category": "Photography", "guidance": "Request full gallery samples."},
+    ]
+    app, c, ev, base, _ = setup(make_app, lambda m, n: json.dumps(plan_with_deps))
+    c.post(f"{base}/vendors", {"name": "Existing Photographer", "category": "Photography"})
+
+    draft = c.post(f"{base}/ai/plans", {}).json
+    assert draft["plan"]["tasks"][1]["dependsOn"] == ["Book venue"]
+
+    # Selective apply: only Catering category, both tasks, and includeVendors=True
+    res = c.post(
+        f"{base}/ai/plans/{draft['id']}/apply",
+        {"categories": ["Catering"], "tasks": ["Book venue", "Send invitations"], "includeVendors": True},
+    )
+    assert res.status == 200
+    assert res.json == {
+        "categoriesCreated": 1,
+        "categoriesSkipped": 0,
+        "tasksCreated": 2,
+        "tasksSkipped": 0,
+        "unallocatedCents": 1_000_000 - 333_300,
+        "vendorsCreated": 1,  # Photography skipped because category already exists
+    }
+    cats = c.get(f"{base}/budget-categories").json
+    assert [x["name"] for x in cats] == ["Catering"]
+
+    tasks = {t["title"]: t for t in c.get(f"{base}/tasks").json}
+    assert tasks["Send invitations"]["dependsOn"] == [tasks["Book venue"]["id"]]
+    assert tasks["Send invitations"]["blocked"] is True
+
+    vendors = {v["category"]: v for v in c.get(f"{base}/vendors").json}
+    assert vendors["Catering"]["name"] == "Catering (shortlist)"
+    assert vendors["Catering"]["status"] == "researching"
+    assert vendors["Catering"]["contact"] == "Ask about dietary options."
+
+
+def test_ai_task_dependency_validation_and_repair(make_app):
+    bad_cycle = valid_plan()
+    bad_cycle["tasks"][0]["dependsOn"] = ["Send invitations"]
+    bad_cycle["tasks"][1]["dependsOn"] = ["Book venue"]
+
+    bad_unknown = valid_plan()
+    bad_unknown["tasks"][0]["dependsOn"] = ["Nonexistent task"]
+
+    outputs = [json.dumps(bad_cycle), json.dumps(bad_unknown), json.dumps(valid_plan())]
+    app, c, ev, base, model = setup(make_app, lambda m, n: outputs[n - 1])
+    r = c.post(f"{base}/ai/plans", {})
+    assert r.status == 201
+    assert len(model.calls) == 3
+    assert "cycle" in model.calls[1][-1].content
+    assert "does not match" in model.calls[2][-1].content
+
+
+def test_ai_rate_limit_logs_security_event(make_app):
+    app, c, ev, base, _ = setup(make_app, limits={"ai_minute": 1})
+    assert c.post(f"{base}/ai/plans", {}).status == 201
+    assert c.post(f"{base}/ai/plans", {}).status == 429
+    events = [r["type"] for r in app.db.execute("SELECT type FROM security_events").fetchall()]
+    assert "ai_rate_limited" in events
+
+
+def test_graph_extracts_json_wrapped_in_prose_on_first_attempt(make_app):
+    wrapped = f"Here is your requested draft plan:\n{json.dumps(valid_plan())}\nHope this helps!"
+    app, c, ev, base, model = setup(make_app, lambda m, n: wrapped)
+    r = c.post(f"{base}/ai/plans", {})
+    assert r.status == 201
+    assert len(model.calls) == 1

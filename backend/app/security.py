@@ -66,20 +66,26 @@ def client_ip(request: Request, trust_proxy: bool) -> str:
 
 
 class RateLimiter:
-    """Fixed-window in-memory limiter. Single-instance only (TD-002)."""
+    """Fixed-window in-memory limiter with bounded key capacity. Single-instance only (TD-002)."""
 
-    def __init__(self, limit: int, window_s: float, clock: Callable[[], float] = time.monotonic) -> None:
+    def __init__(
+        self, limit: int, window_s: float, clock: Callable[[], float] = time.monotonic, max_keys: int = 10000
+    ) -> None:
         self.limit = limit
         self.window_s = window_s
+        self.max_keys = max_keys
         self._clock = clock
         self._buckets: dict[str, list[float]] = {}
 
     def hit(self, key: str) -> tuple[bool, int]:
         now = self._clock()
-        if len(self._buckets) > 10000:
-            self._buckets = {k: b for k, b in self._buckets.items() if b[1] > now}
         bucket = self._buckets.get(key)
         if bucket is None or bucket[1] <= now:
+            if len(self._buckets) >= self.max_keys and key not in self._buckets:
+                self._buckets = {k: b for k, b in self._buckets.items() if b[1] > now}
+                if len(self._buckets) >= self.max_keys:
+                    oldest_key = min(self._buckets, key=lambda k: self._buckets[k][1])
+                    del self._buckets[oldest_key]
             bucket = [0, now + self.window_s]
             self._buckets[key] = bucket
         bucket[0] += 1

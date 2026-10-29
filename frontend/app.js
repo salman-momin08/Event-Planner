@@ -33,11 +33,7 @@ function renderNav() {
       'ul',
       { class: 'nav-list' },
       ...(state.user
-        ? [
-            link('#/events', 'Events'),
-            link('#/account', 'Account'),
-            h('li', null, button('Sign out', { onClick: signOut })),
-          ]
+        ? [link('#/events', 'Events'), link('#/account', 'Account'), h('li', null, button('Sign out', { onClick: signOut }))]
         : [link('#/login', 'Sign in'), link('#/register', 'Create account')]),
     ),
   );
@@ -72,8 +68,17 @@ async function eventView(id, section, ctx) {
       h('p', null, h('a', { href: '#/events' }, '← All events')),
       h('h1', null, ev.title),
       h('p', { class: 'sub' }, `${EVENT_TYPE[ev.type]} · ${formatDate(ev.eventDate)}`),
-      h('nav', { 'aria-label': 'Event sections' }, h('ul', { class: 'subnav' }, SECTIONS.map(([key, text]) =>
-        h('li', null, h('a', { href: `#/events/${id}${key === 'overview' ? '' : `/${key}`}`, 'aria-current': key === section ? 'page' : undefined }, text))))),
+      h(
+        'nav',
+        { 'aria-label': 'Event sections' },
+        h(
+          'ul',
+          { class: 'subnav' },
+          SECTIONS.map(([key, text]) =>
+            h('li', null, h('a', { href: `#/events/${id}${key === 'overview' ? '' : `/${key}`}`, 'aria-current': key === section ? 'page' : undefined }, text)),
+          ),
+        ),
+      ),
       content,
     ),
   };
@@ -81,10 +86,45 @@ async function eventView(id, section, ctx) {
 
 let renderToken = 0;
 
+function captureFocusState() {
+  const active = document.activeElement;
+  if (!active || !main.contains(active)) return null;
+  const row = active.closest('tr');
+  if (row && !row.classList.contains('edit-row')) {
+    const key = row.querySelector('th[scope="row"]')?.textContent?.trim();
+    const buttons = [...row.querySelectorAll('.row-actions button')];
+    const btnIndex = buttons.indexOf(active);
+    if (key && btnIndex >= 0) return { kind: 'row-button', key, btnIndex };
+  }
+  return null;
+}
+
+function restoreFocusState(saved) {
+  if (!saved || saved.kind !== 'row-button') return false;
+  for (const row of main.querySelectorAll('tbody tr')) {
+    const key = row.querySelector('th[scope="row"]')?.textContent?.trim();
+    if (key === saved.key) {
+      const btn = row.querySelectorAll('.row-actions button')[saved.btnIndex];
+      if (btn) {
+        btn.focus();
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 async function render({ keepContext = false } = {}) {
   const token = ++renderToken;
+  const savedFocus = keepContext ? captureFocusState() : null;
   const segments = (location.hash.replace(/^#\/?/, '') || '').split('/').filter(Boolean);
-  const ctx = { navigate, refresh: async (message) => { await render({ keepContext: true }); if (message) announce(message); } };
+  const ctx = {
+    navigate,
+    refresh: async (message) => {
+      await render({ keepContext: true });
+      if (message) announce(message);
+    },
+  };
   let view;
   try {
     const [root, a, b] = segments;
@@ -95,7 +135,14 @@ async function render({ keepContext = false } = {}) {
     } else if (!state.user) {
       return navigate('#/login');
     } else if (root === 'account' && !a) {
-      view = accountView({ user: state.user, onDeleted: async () => { state.user = null; navigate('#/register'); announce('Your account was deleted.'); } });
+      view = accountView({
+        user: state.user,
+        onDeleted: async () => {
+          state.user = null;
+          navigate('#/register');
+          announce('Your account was deleted.');
+        },
+      });
     } else if (root === 'events' && !a) {
       view = await eventsListView();
     } else if (root === 'events' && a === 'new') {
@@ -108,12 +155,23 @@ async function render({ keepContext = false } = {}) {
   } catch (err) {
     if (token !== renderToken) return;
     if (err instanceof ApiError && err.status === 404) view = notFoundView();
-    else view = { title: 'Error', node: h('div', null, h('h1', null, 'Something went wrong'), alertBox(err instanceof ApiError ? err.message : 'Unexpected error. Please try again.', 'error'), h('p', null, button('Try again', { onClick: () => render() }))) };
+    else
+      view = {
+        title: 'Error',
+        node: h(
+          'div',
+          null,
+          h('h1', null, 'Something went wrong'),
+          alertBox(err instanceof ApiError ? err.message : 'Unexpected error. Please try again.', 'error'),
+          h('p', null, button('Try again', { onClick: () => render() })),
+        ),
+      };
   }
   if (token !== renderToken) return;
   main.replaceChildren(view.node);
   document.title = `${view.title} · Event Planner`;
   renderNav();
+  if (keepContext && restoreFocusState(savedFocus)) return;
   const heading = (keepContext && main.querySelector('h2')) || main.querySelector('h1');
   if (heading) {
     heading.setAttribute('tabindex', '-1');

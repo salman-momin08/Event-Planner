@@ -87,11 +87,14 @@ def test_051_csv_cells_neutralise_formulas():
 
 def test_rate_limiter():
     t = [0.0]
-    rl = RateLimiter(2, 1.0, clock=lambda: t[0])
+    rl = RateLimiter(2, 1.0, clock=lambda: t[0], max_keys=3)
     assert rl.hit("k")[0] and rl.hit("k")[0]
     allowed, retry = rl.hit("k")
     assert not allowed and retry >= 1
     assert rl.hit("other")[0]
+    assert rl.hit("third")[0]
+    assert rl.hit("fourth")[0]
+    assert len(rl._buckets) <= 3  # bounded key capacity
     t[0] = 1.001
     assert rl.hit("k")[0]
 

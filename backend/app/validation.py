@@ -3,12 +3,14 @@ from __future__ import annotations
 
 import re
 import unicodedata
-from typing import Annotated
+from typing import Annotated, TypeVar
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field
+from pydantic import AfterValidator, BaseModel, BeforeValidator, ConfigDict, Field
 
 from .dates import is_valid_date
 from .money import MAX_CENTS
+
+T = TypeVar("T")
 
 # Keeps \t and \n; strips other control characters.
 _CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
@@ -57,6 +59,17 @@ def _date(value: str) -> str:
 
 def _unique_ids(values: list[int]) -> list[int]:
     return list(dict.fromkeys(values))
+
+
+def _reject_null(value: object) -> object:
+    if value is None:
+        raise ValueError("Must not be null")
+    return value
+
+
+def NonNull(tp: type[T]) -> type[T | None]:
+    """Allows omitting a field on PATCH (default None) while rejecting explicit JSON null."""
+    return Annotated[tp | None, BeforeValidator(_reject_null)]  # type: ignore[return-value]
 
 
 Email = Annotated[str, Field(strict=True), AfterValidator(_email)]

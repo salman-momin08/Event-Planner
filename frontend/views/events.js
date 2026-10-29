@@ -6,7 +6,7 @@ const CURRENCIES = ['USD', 'EUR', 'GBP', 'INR', 'AUD', 'CAD', 'SGD', 'NZD', 'CHF
 export const eventFields = [
   { name: 'type', label: 'Event type', kind: 'select', required: true, options: Object.entries(EVENT_TYPE) },
   { name: 'title', label: 'Title', required: true, max: 120 },
-  { name: 'eventDate', label: 'Event date', kind: 'date', required: true, hint: 'Format: YYYY-MM-DD, for example 2027-05-14' },
+  { name: 'eventDate', label: 'Event date', kind: 'date', required: true, hint: 'Format: YYYY-MM-DD (changing this shifts dated tasks automatically)' },
   { name: 'attendance', label: 'Expected attendance', kind: 'number', required: true, min: 1, max: 100000 },
   { name: 'location', label: 'Location', max: 120, hint: 'City or venue. This may be shared with the AI assistant if you use it.' },
   { name: 'currency', label: 'Currency', kind: 'select', options: CURRENCIES.map((c) => [c, c]) },
@@ -33,7 +33,9 @@ export async function eventsListView() {
           ],
           rows: events,
         })
-      : emptyState('You have no events yet. Create your first event to start planning: set a date, headcount and budget, then add tasks, vendors and expenses.'),
+      : emptyState(
+          'You have no events yet. Create your first event to start planning: set a date, headcount and budget, then add tasks, vendors and expenses.',
+        ),
   );
   return { title: 'Your events', node };
 }
@@ -68,31 +70,66 @@ export async function overviewSection(ev, { refresh, navigate }) {
     'div',
     null,
     h('h2', null, 'Overview'),
-    h('dl', { class: 'facts' },
-      h('dt', null, 'Type'), h('dd', null, EVENT_TYPE[ev.type]),
-      h('dt', null, 'Date'), h('dd', null, formatDate(ev.eventDate)),
-      h('dt', null, 'Expected attendance'), h('dd', null, ev.attendance),
-      h('dt', null, 'Location'), h('dd', null, ev.location || 'Not set'),
-      h('dt', null, 'Notes'), h('dd', { class: 'prewrap' }, ev.notes || 'None')),
+    h(
+      'dl',
+      { class: 'facts' },
+      h('dt', null, 'Type'),
+      h('dd', null, EVENT_TYPE[ev.type]),
+      h('dt', null, 'Date'),
+      h('dd', null, formatDate(ev.eventDate)),
+      h('dt', null, 'Expected attendance'),
+      h('dd', null, ev.attendance),
+      h('dt', null, 'Location'),
+      h('dd', null, ev.location || 'Not set'),
+      h('dt', null, 'Notes'),
+      h('dd', { class: 'prewrap' }, ev.notes || 'None'),
+    ),
     h('h3', null, 'Budget'),
-    h('dl', { class: 'facts' },
-      h('dt', null, 'Total budget'), h('dd', null, money(b.totalCents)),
-      h('dt', null, 'Spent'), h('dd', null, money(b.spentCents)),
-      h('dt', null, 'Remaining'), h('dd', null, b.overBudget ? `⛔ Over budget by ${money(-b.remainingCents)}` : `✔ ${money(b.remainingCents)} left`)),
-    b.overAllocated ? h('p', { class: 'alert warn', role: 'status' }, `⚠ Category budgets add up to ${money(b.allocatedCents)}, more than your total budget.`) : null,
+    h(
+      'dl',
+      { class: 'facts' },
+      h('dt', null, 'Total budget'),
+      h('dd', null, money(b.totalCents)),
+      h('dt', null, 'Spent'),
+      h('dd', null, money(b.spentCents)),
+      h('dt', null, 'Remaining'),
+      h('dd', null, b.overBudget ? `⛔ Over budget by ${money(-b.remainingCents)}` : `✔ ${money(b.remainingCents)} left`),
+    ),
+    b.overAllocated
+      ? h('p', { class: 'alert warn', role: 'status' }, `⚠ Category budgets add up to ${money(b.allocatedCents)}, more than your total budget.`)
+      : null,
     h('h3', null, 'Progress'),
-    h('dl', { class: 'facts' },
-      h('dt', null, 'Tasks done'), h('dd', null, `${s.tasks.done} of ${s.tasks.total}`),
-      h('dt', null, 'Overdue tasks'), h('dd', null, s.tasks.overdue ? `⚠ ${s.tasks.overdue}` : '0'),
-      h('dt', null, 'Blocked tasks'), h('dd', null, s.tasks.blocked ? `⛔ ${s.tasks.blocked}` : '0'),
-      h('dt', null, 'Vendors booked'), h('dd', null, `${s.vendors.booked} of ${s.vendors.total}`)),
-    s.tasks.total === 0 ? emptyState('No tasks yet. Generate a timeline from a template, ask the AI assistant for a draft, or add tasks yourself.', h('a', { class: 'btn', href: `#/events/${ev.id}/timeline` }, 'Go to timeline')) : null,
+    h(
+      'dl',
+      { class: 'facts' },
+      h('dt', null, 'Tasks done'),
+      h('dd', null, `${s.tasks.done} of ${s.tasks.total}`),
+      h('dt', null, 'Overdue tasks'),
+      h('dd', null, s.tasks.overdue ? `⚠ ${s.tasks.overdue}` : '0'),
+      h('dt', null, 'Blocked tasks'),
+      h('dd', null, s.tasks.blocked ? `⛔ ${s.tasks.blocked}` : '0'),
+      h('dt', null, 'Vendors booked'),
+      h('dd', null, `${s.vendors.booked} of ${s.vendors.total}`),
+    ),
+    s.tasks.total === 0
+      ? emptyState(
+          'No tasks yet. Generate a timeline from a template, ask the AI assistant for a draft, or add tasks yourself.',
+          h('a', { class: 'btn', href: `#/events/${ev.id}/timeline` }, 'Go to timeline'),
+        )
+      : null,
     h('details', null, h('summary', null, 'Edit event details'), editForm),
     h('h3', null, 'Danger zone'),
     button('Delete this event', {
       variant: 'danger',
       onClick: async () => {
-        if (!confirmAction(`Delete “${ev.title}” and everything in it? This cannot be undone.`)) return;
+        if (
+          !(await confirmAction(`Delete “${ev.title}” and everything in it? This cannot be undone.`, {
+            title: 'Delete event',
+            confirmLabel: 'Delete event',
+            variant: 'danger',
+          }))
+        )
+          return;
         await del(`/events/${ev.id}`);
         navigate('#/events');
       },
@@ -108,10 +145,13 @@ export function exportSection(ev) {
     null,
     h('h2', null, 'Export'),
     h('p', null, 'Download your plan to share or keep a copy. Spreadsheet files are safe to open: cells that could be run as formulas are neutralised.'),
-    h('ul', null,
+    h(
+      'ul',
+      null,
       link('Everything (JSON)', 'format=json'),
       link('Tasks (CSV)', 'format=csv&section=tasks'),
       link('Expenses (CSV)', 'format=csv&section=expenses'),
-      link('Vendors (CSV)', 'format=csv&section=vendors')),
+      link('Vendors (CSV)', 'format=csv&section=vendors'),
+    ),
   );
 }

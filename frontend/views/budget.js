@@ -3,13 +3,9 @@ import { BUDGET_STATUS, alertBox, dataTable, emptyState, formView, formatDate, f
 import { deleteButton, editButton } from '../crud.js';
 
 export async function budgetSection(ev, { refresh }) {
-  const [summary, categories, expenses, vendors] = await Promise.all([
-    get(`/events/${ev.id}/summary`),
-    get(`/events/${ev.id}/budget-categories`),
-    get(`/events/${ev.id}/expenses`),
-    get(`/events/${ev.id}/vendors`),
-  ]);
+  const [summary, expenses, vendors] = await Promise.all([get(`/events/${ev.id}/summary`), get(`/events/${ev.id}/expenses`), get(`/events/${ev.id}/vendors`)]);
   const b = summary.budget;
+  const categories = b.categories;
   const money = (c) => formatMoney(c, ev.currency);
   const catName = new Map(categories.map((c) => [c.id, c.name]));
   const vendorName = new Map(vendors.map((v) => [v.id, v.name]));
@@ -24,20 +20,46 @@ export async function budgetSection(ev, { refresh }) {
     { name: 'amountCents', label: 'Amount', kind: 'money', required: true },
     { name: 'spentOn', label: 'Date', kind: 'date', required: true, hint: 'YYYY-MM-DD' },
     { name: 'categoryId', label: 'Category', kind: 'select', required: true, numeric: true, options: categories.map((c) => [c.id, c.name]) },
-    { name: 'vendorId', label: 'Vendor (optional)', kind: 'select', numeric: true, nullable: true, options: [['', 'None'], ...vendors.map((v) => [v.id, v.name])] },
+    {
+      name: 'vendorId',
+      label: 'Vendor (optional)',
+      kind: 'select',
+      numeric: true,
+      nullable: true,
+      options: [['', 'None'], ...vendors.map((v) => [v.id, v.name])],
+    },
   ];
 
   return h(
     'div',
     null,
     h('h2', null, 'Budget'),
-    h('dl', { class: 'facts' },
-      h('dt', null, 'Total budget'), h('dd', null, money(b.totalCents)),
-      h('dt', null, 'Allocated to categories'), h('dd', null, money(b.allocatedCents)),
-      h('dt', null, 'Not yet allocated'), h('dd', null, b.overAllocated ? `⚠ Over-allocated by ${money(-b.unallocatedCents)}` : money(b.unallocatedCents)),
-      h('dt', null, 'Spent'), h('dd', null, money(b.spentCents)),
-      h('dt', null, 'Remaining'), h('dd', null, b.overBudget ? `⛔ Over budget by ${money(-b.remainingCents)}` : `✔ ${money(b.remainingCents)}`)),
-    b.totalCents > 0 ? h('p', null, h('progress', { max: b.totalCents, value: Math.min(b.spentCents, b.totalCents), 'aria-label': 'Share of total budget spent' }, `${Math.round((b.spentCents / b.totalCents) * 100)}%`), ` ${Math.round((b.spentCents / b.totalCents) * 100)}% of total budget spent`) : alertBox('Set a total budget in the event details to see spending progress.'),
+    h(
+      'dl',
+      { class: 'facts' },
+      h('dt', null, 'Total budget'),
+      h('dd', null, money(b.totalCents)),
+      h('dt', null, 'Allocated to categories'),
+      h('dd', null, money(b.allocatedCents)),
+      h('dt', null, 'Not yet allocated'),
+      h('dd', null, b.overAllocated ? `⚠ Over-allocated by ${money(-b.unallocatedCents)}` : money(b.unallocatedCents)),
+      h('dt', null, 'Spent'),
+      h('dd', null, money(b.spentCents)),
+      h('dt', null, 'Remaining'),
+      h('dd', null, b.overBudget ? `⛔ Over budget by ${money(-b.remainingCents)}` : `✔ ${money(b.remainingCents)}`),
+    ),
+    b.totalCents > 0
+      ? h(
+          'p',
+          null,
+          h(
+            'progress',
+            { max: b.totalCents, value: Math.min(b.spentCents, b.totalCents), 'aria-label': 'Share of total budget spent' },
+            `${Math.round((b.spentCents / b.totalCents) * 100)}%`,
+          ),
+          ` ${Math.round((b.spentCents / b.totalCents) * 100)}% of total budget spent`,
+        )
+      : alertBox('Set a total budget in the event details to see spending progress.'),
 
     h('h3', null, 'Categories'),
     dataTable({
@@ -51,13 +73,35 @@ export async function budgetSection(ev, { refresh }) {
       ],
       rows: b.categories,
       actions: (c) => [
-        editButton({ fields: categoryFields, initial: c, save: async (v) => (await patch(`${base}/budget-categories/${c.id}`, v), refresh('Category saved.')) }),
-        deleteButton({ what: `category “${c.name}”`, remove: async () => { try { await del(`${base}/budget-categories/${c.id}`); await refresh('Category deleted.'); } catch (e) { await refresh(`Could not delete: ${e.message}`); } } }),
+        editButton({
+          fields: categoryFields,
+          initial: c,
+          save: async (v) => (await patch(`${base}/budget-categories/${c.id}`, v), refresh('Category saved.')),
+        }),
+        deleteButton({
+          what: `category “${c.name}”`,
+          remove: async () => {
+            try {
+              await del(`${base}/budget-categories/${c.id}`);
+              await refresh('Category deleted.');
+            } catch (e) {
+              await refresh(`Could not delete: ${e.message}`);
+            }
+          },
+        }),
       ],
       empty: emptyState('No categories yet. Split your budget into categories such as Venue, Catering and Decor to see where money goes.'),
     }),
-    h('details', null, h('summary', null, 'Add a category'),
-      formView({ fields: categoryFields, submitLabel: 'Add category', onSubmit: async (v) => (await post(`${base}/budget-categories`, v), refresh('Category added.')) })),
+    h(
+      'details',
+      null,
+      h('summary', null, 'Add a category'),
+      formView({
+        fields: categoryFields,
+        submitLabel: 'Add category',
+        onSubmit: async (v) => (await post(`${base}/budget-categories`, v), refresh('Category added.')),
+      }),
+    ),
 
     h('h3', null, 'Expenses'),
     dataTable({
@@ -77,8 +121,17 @@ export async function budgetSection(ev, { refresh }) {
       empty: emptyState('No expenses logged yet.'),
     }),
     categories.length
-      ? h('details', null, h('summary', null, 'Add an expense'),
-          formView({ fields: expenseFields, initial: { spentOn: new Date().toISOString().slice(0, 10) }, submitLabel: 'Add expense', onSubmit: async (v) => (await post(`${base}/expenses`, v), refresh('Expense added.')) }))
+      ? h(
+          'details',
+          null,
+          h('summary', null, 'Add an expense'),
+          formView({
+            fields: expenseFields,
+            initial: { spentOn: new Date().toISOString().slice(0, 10) },
+            submitLabel: 'Add expense',
+            onSubmit: async (v) => (await post(`${base}/expenses`, v), refresh('Expense added.')),
+          }),
+        )
       : h('p', { class: 'hint' }, 'Add a category before logging expenses.'),
   );
 }

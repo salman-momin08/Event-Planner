@@ -7,6 +7,7 @@ database or applies a plan.
 from __future__ import annotations
 
 import asyncio
+import json
 from typing import Any, TypedDict
 
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -46,6 +47,16 @@ def _text_of(message: BaseMessage) -> str:
     return ""
 
 
+def _parse_json(parser: JsonOutputParser, raw: str) -> Any:
+    try:
+        return parser.parse(raw)
+    except (OutputParserException, ValueError):
+        start, end = raw.find("{"), raw.rfind("}")
+        if 0 <= start < end:
+            return json.loads(raw[start : end + 1])
+        raise
+
+
 def build_plan_graph(model: BaseChatModel, *, timeout_s: float, max_repairs: int):
     parser = JsonOutputParser()
 
@@ -65,7 +76,7 @@ def build_plan_graph(model: BaseChatModel, *, timeout_s: float, max_repairs: int
 
     async def validate(state: PlanState) -> PlanState:
         try:
-            parsed = parser.parse(state["raw"])
+            parsed = _parse_json(parser, state["raw"])
         except (OutputParserException, ValueError):
             return {"plan": None, "error": "The reply was not a valid JSON object."}
         try:

@@ -14,10 +14,19 @@ export async function tasksSection(ev, { refresh }) {
     { name: 'dueDate', label: 'Due date', kind: 'date', nullable: true, hint: 'YYYY-MM-DD. Leave empty for no deadline.' },
     { name: 'status', label: 'Status', kind: 'select', options: Object.entries(TASK_STATUS) },
     { name: 'category', label: 'Category', max: 80 },
-    { name: 'vendorId', label: 'Related vendor', kind: 'select', numeric: true, nullable: true, options: [['', 'None'], ...vendors.map((v) => [v.id, v.name])] },
     {
-      name: 'dependsOn', label: 'Must be done first', kind: 'multiselect',
-      hint: 'Optional. Select tasks that need to finish before this one (Ctrl/Cmd+click for several).',
+      name: 'vendorId',
+      label: 'Related vendor',
+      kind: 'select',
+      numeric: true,
+      nullable: true,
+      options: [['', 'None'], ...vendors.map((v) => [v.id, v.name])],
+    },
+    {
+      name: 'dependsOn',
+      label: 'Must be done first',
+      kind: 'multiselect',
+      hint: 'Optional. Check any tasks that need to finish before this one.',
       options: tasks.filter((t) => t.id !== self?.id).map((t) => [t.id, t.title]),
     },
   ];
@@ -36,15 +45,30 @@ export async function tasksSection(ev, { refresh }) {
       rows: tasks,
       actions: (t) => [
         button(t.status === 'done' ? 'Reopen' : 'Mark done', {
-          onClick: async () => (await patch(`${base}/tasks/${t.id}`, { status: t.status === 'done' ? 'todo' : 'done' }), refresh(t.status === 'done' ? `“${t.title}” reopened.` : `“${t.title}” marked done.`)),
+          onClick: async () => (
+            await patch(`${base}/tasks/${t.id}`, { status: t.status === 'done' ? 'todo' : 'done' }),
+            refresh(t.status === 'done' ? `“${t.title}” reopened.` : `“${t.title}” marked done.`)
+          ),
         }),
         editButton({ fields: fields(t), initial: t, save: async (v) => (await patch(`${base}/tasks/${t.id}`, v), refresh('Task saved.')) }),
         deleteButton({ what: `task “${t.title}”`, remove: async () => (await del(`${base}/tasks/${t.id}`), refresh('Task deleted.')) }),
       ],
-      empty: emptyState('No tasks yet. Add one below, or generate a ready-made timeline.', h('a', { class: 'btn', href: `#/events/${ev.id}/timeline` }, 'Generate timeline')),
+      empty: emptyState(
+        'No tasks yet. Add one below, or generate a ready-made timeline.',
+        h('a', { class: 'btn', href: `#/events/${ev.id}/timeline` }, 'Generate timeline'),
+      ),
     }),
-    h('details', null, h('summary', null, 'Add a task'),
-      formView({ fields: fields(null), initial: { status: 'todo' }, submitLabel: 'Add task', onSubmit: async (v) => (await post(`${base}/tasks`, v), refresh('Task added.')) })),
+    h(
+      'details',
+      null,
+      h('summary', null, 'Add a task'),
+      formView({
+        fields: fields(null),
+        initial: { status: 'todo' },
+        submitLabel: 'Add task',
+        onSubmit: async (v) => (await post(`${base}/tasks`, v), refresh('Task added.')),
+      }),
+    ),
   );
 }
 
@@ -56,24 +80,48 @@ export async function timelineSection(ev, { refresh }) {
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(t);
   }
-  const item = (t) => h('li', null, h('strong', null, t.dueDate ? formatDate(t.dueDate) : 'No date'), ' — ', t.title, ' ', h('span', { class: 'sub' }, TASK_STATUS[t.status]), flags(t) ? h('span', { class: 'flag' }, ` ${flags(t)}`) : null);
+  const item = (t) =>
+    h(
+      'li',
+      null,
+      h('strong', null, t.dueDate ? formatDate(t.dueDate) : 'No date'),
+      ' — ',
+      t.title,
+      ' ',
+      h('span', { class: 'sub' }, TASK_STATUS[t.status]),
+      flags(t) ? h('span', { class: 'flag' }, ` ${flags(t)}`) : null,
+    );
   return h(
     'div',
     null,
     h('h2', null, 'Timeline'),
     h('p', null, `Today is ${formatDate(tl.today)}. The event is on ${formatDate(ev.eventDate)}.`),
-    h('p', null, button('Generate timeline from template', {
-      variant: 'primary',
-      onClick: async () => {
-        const r = await post(`/events/${ev.id}/timeline/generate-template`);
-        await refresh(`${r.created} task${r.created === 1 ? '' : 's'} added, ${r.skipped} already existed.`);
-      },
-    })),
-    h('p', { class: 'hint' }, 'The template adds typical steps for this event type, dated backwards from the event date. Running it again never creates duplicates.'),
+    h(
+      'p',
+      null,
+      button('Generate timeline from template', {
+        variant: 'primary',
+        onClick: async () => {
+          const r = await post(`/events/${ev.id}/timeline/generate-template`);
+          await refresh(`${r.created} task${r.created === 1 ? '' : 's'} added, ${r.skipped} already existed.`);
+        },
+      }),
+    ),
+    h(
+      'p',
+      { class: 'hint' },
+      'The template adds typical steps for this event type, dated backwards from the event date. Running it again never creates duplicates.',
+    ),
     tl.dated.length || tl.undated.length
       ? [
           ...[...groups.entries()].map(([month, list]) =>
-            h('section', null, h('h3', null, new Date(`${month}-01T00:00:00Z`).toLocaleDateString(undefined, { timeZone: 'UTC', month: 'long', year: 'numeric' })), h('ol', { class: 'timeline' }, list.map(item)))),
+            h(
+              'section',
+              null,
+              h('h3', null, new Date(`${month}-01T00:00:00Z`).toLocaleDateString(undefined, { timeZone: 'UTC', month: 'long', year: 'numeric' })),
+              h('ol', { class: 'timeline' }, list.map(item)),
+            ),
+          ),
           tl.undated.length ? h('section', null, h('h3', null, 'No date'), h('ul', { class: 'timeline' }, tl.undated.map(item))) : null,
         ]
       : emptyState('Your timeline is empty. Generate one from a template, or add dated tasks on the Tasks page.'),
@@ -111,7 +159,16 @@ export async function vendorsSection(ev, { refresh }) {
       ],
       empty: emptyState('No vendors yet. Add the venues, caterers and other suppliers you are considering so quotes and decisions stay in one place.'),
     }),
-    h('details', null, h('summary', null, 'Add a vendor'),
-      formView({ fields, initial: { status: 'researching' }, submitLabel: 'Add vendor', onSubmit: async (v) => (await post(`${base}/vendors`, v), refresh('Vendor added.')) })),
+    h(
+      'details',
+      null,
+      h('summary', null, 'Add a vendor'),
+      formView({
+        fields,
+        initial: { status: 'researching' },
+        submitLabel: 'Add vendor',
+        onSubmit: async (v) => (await post(`${base}/vendors`, v), refresh('Vendor added.')),
+      }),
+    ),
   );
 }

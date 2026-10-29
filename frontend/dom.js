@@ -96,17 +96,53 @@ function fieldEl(spec, initial) {
   const id = `f-${++uid}`;
   const hintId = `${id}-hint`;
   const errId = `${id}-err`;
+  const errorEl = h('p', { id: errId, class: 'field-error' });
+  const describedBy = `${spec.hint ? hintId + ' ' : ''}${errId}`;
+
+  if (spec.kind === 'multiselect') {
+    const selectedSet = new Set((Array.isArray(initial) ? initial : []).map(String));
+    const checkboxes = spec.options.map(([value, text]) => {
+      const cb = h('input', {
+        type: 'checkbox',
+        name: spec.name,
+        value: String(value),
+        checked: selectedSet.has(String(value)),
+      });
+      return h('label', { class: 'checkbox-item' }, cb, h('span', null, text));
+    });
+    const fieldset = h(
+      'fieldset',
+      { id, class: 'field checkbox-fieldset', 'aria-describedby': describedBy },
+      h('legend', null, spec.label, spec.required ? h('span', { class: 'req' }, ' (required)') : null),
+      spec.hint ? h('p', { id: hintId, class: 'hint' }, spec.hint) : null,
+      checkboxes.length ? h('div', { class: 'checkbox-group' }, checkboxes) : h('p', { class: 'hint' }, 'No other items available yet.'),
+      errorEl,
+    );
+    return {
+      el: fieldset,
+      input: fieldset,
+      id,
+      focus() {
+        (fieldset.querySelector('input[type="checkbox"]') ?? fieldset).focus();
+      },
+      setError(message) {
+        errorEl.textContent = message ? `Error: ${message}` : '';
+        if (message) fieldset.setAttribute('aria-invalid', 'true');
+        else fieldset.removeAttribute('aria-invalid');
+      },
+    };
+  }
+
   let input;
-  const common = { id, name: spec.name, 'aria-describedby': `${spec.hint ? hintId + ' ' : ''}${errId}` };
+  const common = { id, name: spec.name, 'aria-describedby': describedBy };
   switch (spec.kind) {
     case 'textarea':
       input = h('textarea', { ...common, rows: spec.rows ?? 3, maxlength: spec.max }, initial ?? '');
       break;
-    case 'select':
-    case 'multiselect': {
+    case 'select': {
       input = h(
         'select',
-        { ...common, multiple: spec.kind === 'multiselect', size: spec.kind === 'multiselect' ? Math.min(6, Math.max(3, spec.options.length)) : undefined },
+        common,
         spec.options.map(([value, text]) => {
           const selected = Array.isArray(initial) ? initial.map(String).includes(String(value)) : String(initial ?? '') === String(value);
           return h('option', { value, selected }, text);
@@ -115,7 +151,13 @@ function fieldEl(spec, initial) {
       break;
     }
     case 'money':
-      input = h('input', { ...common, type: 'text', inputmode: 'decimal', value: initial === null || initial === undefined ? '' : centsToInput(initial), autocomplete: 'off' });
+      input = h('input', {
+        ...common,
+        type: 'text',
+        inputmode: 'decimal',
+        value: initial === null || initial === undefined ? '' : centsToInput(initial),
+        autocomplete: 'off',
+      });
       break;
     case 'number':
       input = h('input', { ...common, type: 'number', min: spec.min, max: spec.max, step: 1, value: initial ?? '' });
@@ -123,7 +165,6 @@ function fieldEl(spec, initial) {
     default:
       input = h('input', { ...common, type: spec.kind ?? 'text', value: initial ?? '', maxlength: spec.max, autocomplete: spec.autocomplete });
   }
-  const errorEl = h('p', { id: errId, class: 'field-error' });
   const el = h(
     'div',
     { class: 'field' },
@@ -136,6 +177,9 @@ function fieldEl(spec, initial) {
     el,
     input,
     id,
+    focus() {
+      input.focus();
+    },
     setError(message) {
       errorEl.textContent = message ? `Error: ${message}` : '';
       if (message) input.setAttribute('aria-invalid', 'true');
@@ -145,10 +189,13 @@ function fieldEl(spec, initial) {
 }
 
 function readField(spec, control) {
+  if (spec.kind === 'multiselect') {
+    return {
+      value: [...control.input.querySelectorAll('input[type="checkbox"]:checked')].map((cb) => Number(cb.value)),
+    };
+  }
   const raw = control.input.value;
   switch (spec.kind) {
-    case 'multiselect':
-      return { value: [...control.input.selectedOptions].map((o) => Number(o.value)) };
     case 'number':
       if (raw === '') return spec.required ? { error: 'Required' } : { skip: true };
       return { value: Number(raw) };
@@ -191,7 +238,13 @@ export function formView({ fields, submitLabel, initial = {}, onSubmit, onCancel
       const c = controls.get(name);
       if (c) {
         c.setError(message);
-        items.push(h('li', null, h('a', { href: `#${c.id}`, onclick: (e) => (e.preventDefault(), c.input.focus()) }, `${fields.find((f) => f.name === name).label}: ${message}`)));
+        items.push(
+          h(
+            'li',
+            null,
+            h('a', { href: `#${c.id}`, onclick: (e) => (e.preventDefault(), c.focus()) }, `${fields.find((f) => f.name === name).label}: ${message}`),
+          ),
+        );
       } else items.push(h('li', null, message));
     }
     summary.replaceChildren(h('p', { role: 'alert' }, general ?? `Please fix ${items.length} problem${items.length === 1 ? '' : 's'}:`), h('ul', null, items));
@@ -231,21 +284,73 @@ export function formView({ fields, submitLabel, initial = {}, onSubmit, onCancel
   return form;
 }
 
-/** Data table with caption, scoped headers, mobile labels and an actions column. */
+/** Data table with caption, scoped headers, explicit ARIA roles for responsive layouts, and an actions column. */
 export function dataTable({ caption, columns, rows, empty, actions }) {
   if (!rows.length) return empty ?? null;
-  const head = h('tr', null, columns.map((c) => h('th', { scope: 'col' }, c.header)), actions ? h('th', { scope: 'col' }, 'Actions') : null);
+  const head = h(
+    'tr',
+    { role: 'row' },
+    columns.map((c) => h('th', { scope: 'col', role: 'columnheader' }, c.header)),
+    actions ? h('th', { scope: 'col', role: 'columnheader' }, 'Actions') : null,
+  );
   const body = rows.map((row) =>
     h(
       'tr',
-      null,
-      columns.map((c, i) => (i === 0 ? h('th', { scope: 'row', 'data-label': c.header }, c.cell(row)) : h('td', { 'data-label': c.header }, c.cell(row)))),
-      actions ? h('td', { 'data-label': 'Actions', class: 'row-actions' }, actions(row)) : null,
+      { role: 'row' },
+      columns.map((c, i) =>
+        i === 0
+          ? h('th', { scope: 'row', role: 'rowheader', 'data-label': c.header }, c.cell(row))
+          : h('td', { role: 'cell', 'data-label': c.header }, c.cell(row)),
+      ),
+      actions ? h('td', { role: 'cell', 'data-label': 'Actions', class: 'row-actions' }, actions(row)) : null,
     ),
   );
-  return h('div', { class: 'table-wrap', role: 'region', 'aria-label': caption, tabindex: '0' }, h('table', null, h('caption', null, caption), h('thead', null, head), h('tbody', null, body)));
+  return h(
+    'div',
+    { class: 'table-wrap', role: 'region', 'aria-label': caption, tabindex: '0' },
+    h('table', { role: 'table' }, h('caption', null, caption), h('thead', { role: 'rowgroup' }, head), h('tbody', { role: 'rowgroup' }, body)),
+  );
 }
 
-export function confirmAction(message) {
-  return window.confirm(message);
+/** Accessible modal confirmation dialog (<dialog>) with focus restoration (ACC-013). */
+export function confirmAction(message, { title = 'Confirm action', confirmLabel = 'Confirm', variant = 'danger' } = {}) {
+  if (typeof HTMLDialogElement === 'undefined' || typeof HTMLDialogElement.prototype.showModal !== 'function') {
+    return Promise.resolve(window.confirm(message));
+  }
+  const previousFocus = document.activeElement;
+  return new Promise((resolve) => {
+    const titleId = `dlg-title-${++uid}`;
+    const descId = `dlg-desc-${uid}`;
+    let settled = false;
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      if (dialog.open) dialog.close();
+      dialog.remove();
+      if (previousFocus && typeof previousFocus.focus === 'function' && document.contains(previousFocus)) {
+        previousFocus.focus();
+      }
+      resolve(result);
+    };
+    const cancelBtn = h('button', { type: 'button', class: 'btn', onclick: () => finish(false) }, 'Cancel');
+    const confirmBtn = h('button', { type: 'button', class: `btn ${variant}`.trim(), onclick: () => finish(true) }, confirmLabel);
+    const dialog = h(
+      'dialog',
+      {
+        class: 'confirm-dialog',
+        'aria-labelledby': titleId,
+        'aria-describedby': descId,
+        oncancel: (e) => {
+          e.preventDefault();
+          finish(false);
+        },
+      },
+      h('h3', { id: titleId }, title),
+      h('p', { id: descId }, message),
+      h('div', { class: 'actions' }, cancelBtn, confirmBtn),
+    );
+    document.body.append(dialog);
+    dialog.showModal();
+    cancelBtn.focus();
+  });
 }

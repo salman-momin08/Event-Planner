@@ -63,10 +63,30 @@ def list_tasks(ctx: Context, event_id: int) -> list[dict]:
 
 
 def _get_task(ctx: Context, event_id: int, task_id: int) -> dict:
-    for task in list_tasks(ctx, event_id):
-        if task["id"] == task_id:
-            return task
-    raise not_found("Task")
+    row = ctx.db.execute("SELECT * FROM tasks WHERE id = ? AND event_id = ?", (task_id, event_id)).fetchone()
+    if row is None:
+        raise not_found("Task")
+    dep_rows = ctx.db.execute(
+        """SELECT td.depends_on_id, p.status FROM task_dependencies td
+           JOIN tasks p ON p.id = td.depends_on_id WHERE td.task_id = ?""",
+        (task_id,),
+    ).fetchall()
+    depends_on = [d["depends_on_id"] for d in dep_rows]
+    today = to_date_string(ctx.clock())
+    open_ = row["status"] != "done"
+    return {
+        "id": row["id"],
+        "title": row["title"],
+        "description": row["description"],
+        "dueDate": row["due_date"],
+        "status": row["status"],
+        "category": row["category"],
+        "vendorId": row["vendor_id"],
+        "source": row["source"],
+        "dependsOn": depends_on,
+        "blocked": open_ and any(d["status"] != "done" for d in dep_rows),
+        "overdue": open_ and row["due_date"] is not None and row["due_date"] < today,
+    }
 
 
 def _assert_vendor(ctx: Context, event_id: int, vendor_id: int | None) -> None:
@@ -160,10 +180,25 @@ def timeline(ctx: Context, event_id: int) -> dict:
 
 
 def task_stats(ctx: Context, event_id: int) -> dict:
-    tasks = list_tasks(ctx, event_id)
+    today = to_date_string(ctx.clock())
+    row = ctx.db.execute(
+        """SELECT
+             COUNT(*) AS total,
+             COALESCE(SUM(t.status = 'done'), 0) AS done,
+             COALESCE(SUM(t.status != 'done' AND t.due_date IS NOT NULL AND t.due_date < ?), 0) AS overdue,
+             COALESCE(SUM(
+               t.status != 'done' AND EXISTS (
+                 SELECT 1 FROM task_dependencies td
+                 JOIN tasks p ON p.id = td.depends_on_id
+                 WHERE td.task_id = t.id AND p.status != 'done'
+               )
+             ), 0) AS blocked
+           FROM tasks t WHERE t.event_id = ?""",
+        (today, event_id),
+    ).fetchone()
     return {
-        "total": len(tasks),
-        "done": sum(t["status"] == "done" for t in tasks),
-        "overdue": sum(t["overdue"] for t in tasks),
-        "blocked": sum(t["blocked"] for t in tasks),
+        "total": row["total"],
+        "done": row["done"],
+        "overdue": row["overdue"],
+        "blocked": row["blocked"],
     }

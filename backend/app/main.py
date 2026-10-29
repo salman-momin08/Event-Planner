@@ -26,6 +26,7 @@ from .routes import ai as ai_routes
 from .routes import auth as auth_routes
 from .routes import events as event_routes
 from .routes import planning as planning_routes
+from .services.auth import purge_security_events
 from .security import (
     MAX_BODY_BYTES,
     RateLimiter,
@@ -200,6 +201,7 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
+        purge_security_events(ctx)
         for warning in settings.warnings:
             logger.warn("config", warning=warning)
         logger.info("starting", environment=settings.environment, aiEnabled=ai.available)
@@ -242,7 +244,7 @@ def create_app(
     async def static_files(full_path: str, request: Request):
         if full_path.startswith("api/") or full_path == "api":
             raise ApiError(404, "not_found", "Not found")
-        return _serve_static(full_path, request.method)
+        return _serve_static(full_path, request.method, request.headers.get("if-none-match"))
 
     # Order matters: the body limit sits *inside* the BaseHTTPMiddleware so the exception reaches FastAPI's body parsing unwrapped.
     app.add_middleware(BodyLimitMiddleware)
@@ -250,7 +252,10 @@ def create_app(
     return app
 
 
-def _serve_static(path: str, method: str) -> Response:
+_STATIC_CACHE: dict[Path, tuple[int, int, str, bytes]] = {}
+
+
+def _serve_static(path: str, method: str, if_none_match: str | None = None) -> Response:
     root = FRONTEND_DIR.resolve()
     if any(ch in path for ch in ("\0", ":", "\\")):  # NUL, NTFS alternate streams, Windows separators
         return PlainTextResponse("Not Found", status_code=404)
@@ -261,5 +266,16 @@ def _serve_static(path: str, method: str) -> Response:
     media_type = MIME.get(target.suffix.lower())
     if not target.is_relative_to(root) or media_type is None or not target.is_file():
         return PlainTextResponse("Not Found", status_code=404)
-    body = b"" if method == "HEAD" else target.read_bytes()
-    return Response(body, media_type=media_type, headers={"Cache-Control": "no-cache"})
+    st = target.stat()
+    cached = _STATIC_CACHE.get(target)
+    if cached is not None and cached[0] == st.st_mtime_ns and cached[1] == st.st_size:
+        etag, data = cached[2], cached[3]
+    else:
+        data = target.read_bytes()
+        etag = f'W/"{st.st_mtime_ns:x}-{st.st_size:x}"'
+        _STATIC_CACHE[target] = (st.st_mtime_ns, st.st_size, etag, data)
+    headers = {"Cache-Control": "no-cache", "ETag": etag}
+    if if_none_match == etag:
+        return Response(b"", status_code=304, headers=headers)
+    body = b"" if method == "HEAD" else data
+    return Response(body, media_type=media_type, headers=headers)

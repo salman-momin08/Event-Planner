@@ -100,3 +100,43 @@ def test_063_account_deletion_cascades(make_app):
     for table in ("users", "sessions", "events", "budget_categories", "tasks", "vendors"):
         assert app.db.execute(f"SELECT COUNT(*) n FROM {table}").fetchone()["n"] == 0, table
     assert c.get("/auth/me").status == 401
+
+
+def test_password_change_and_session_rotation(make_app):
+    app = make_app()
+    c = app.sign_up("pwuser")
+    second_client = app.client()
+    assert second_client.post("/auth/login", {"email": "pwuser@example.com", "password": PASSWORD}).status == 200
+    assert second_client.get("/auth/me").status == 200
+
+    # Wrong current password -> 401
+    bad = c.post("/auth/password", {"currentPassword": "wrong password", "newPassword": "new horse battery staple"})
+    assert bad.status == 401
+
+    # Same password -> 400
+    same = c.post("/auth/password", {"currentPassword": PASSWORD, "newPassword": PASSWORD})
+    assert same.status == 400 and "newPassword" in same.json["error"]["details"]
+
+    # Valid change -> 204, rotates session and revokes other sessions
+    new_pw = "new horse battery staple"
+    ok = c.post("/auth/password", {"currentPassword": PASSWORD, "newPassword": new_pw})
+    assert ok.status == 204
+    assert c.get("/auth/me").status == 200
+    assert second_client.get("/auth/me").status == 401  # old session revoked
+
+    # Old password no longer works; new password works
+    fresh = app.client()
+    assert fresh.post("/auth/login", {"email": "pwuser@example.com", "password": PASSWORD}).status == 401
+    assert fresh.post("/auth/login", {"email": "pwuser@example.com", "password": new_pw}).status == 200
+
+
+def test_security_events_retention_purge(make_app):
+    app = make_app()
+    old_ts = (FIXED_NOW - timedelta(days=91)).isoformat()
+    recent_ts = (FIXED_NOW - timedelta(days=10)).isoformat()
+    app.db.execute("INSERT INTO security_events (at, user_id, type, ip_hash) VALUES (?, NULL, 'old_event', 'abc')", (old_ts,))
+    app.db.execute("INSERT INTO security_events (at, user_id, type, ip_hash) VALUES (?, NULL, 'recent_event', 'abc')", (recent_ts,))
+    app.sign_up("purgeuser")
+    types = [r["type"] for r in app.db.execute("SELECT type FROM security_events").fetchall()]
+    assert "old_event" not in types
+    assert "recent_event" in types and "register" in types

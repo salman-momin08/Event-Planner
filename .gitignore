@@ -3,12 +3,15 @@
 !.env.example
 data/
 .venv/
+node_modules/
 __pycache__/
 .pytest_cache/
 *.pyc
 *.db
 *.db-wal
 *.db-shm
+*.log
+*.tmp
 
-# Internal project documentation (kept locally, not pushed)
+# Internal project documentation
 .agents/

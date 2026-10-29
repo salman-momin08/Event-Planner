@@ -81,6 +81,10 @@ def test_062_static_files_and_traversal(make_app):
     assert c.request("POST", "/", {}).status == 405
     idx = c.request("GET", "/")
     assert idx.status == 200 and idx.headers["content-type"].startswith("text/html")
+    etag = idx.headers["etag"]
+    assert etag.startswith('W/"')
+    not_mod = c.request("GET", "/", headers={"If-None-Match": etag})
+    assert not_mod.status == 304 and not_mod.text == ""
     assert c.request("GET", "/app.js").headers["content-type"].startswith("text/javascript")
     assert c.request("GET", "/views/ai.js").status == 200
     head = c.request("HEAD", "/")

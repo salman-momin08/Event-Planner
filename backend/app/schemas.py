@@ -1,7 +1,9 @@
 """Request schemas. Patch models never allow null for non-nullable fields."""
 from __future__ import annotations
 
-from typing import Literal
+from typing import Annotated, Literal
+
+from pydantic import Field
 
 from .money import Currency
 from .validation import (
@@ -10,6 +12,7 @@ from .validation import (
     Email,
     IdList,
     Int,
+    NonNull,
     PositiveCents,
     RecordId,
     Secret,
@@ -33,6 +36,11 @@ class LoginIn(StrictModel):
     password: Secret(1, 128)
 
 
+class ChangePasswordIn(StrictModel):
+    currentPassword: Secret(1, 128)
+    newPassword: Secret(12, 128)
+
+
 class DeleteAccountIn(StrictModel):
     password: Secret(1, 128)
 
@@ -49,14 +57,15 @@ class EventIn(StrictModel):
 
 
 class EventPatch(StrictModel):
-    type: EventType = None  # type: ignore[assignment]
-    title: Text(120, min_len=1) = None  # type: ignore[assignment]
-    eventDate: DateStr = None  # type: ignore[assignment]
-    attendance: Int(1, 100000) = None  # type: ignore[assignment]
-    location: Text(120) = None  # type: ignore[assignment]
-    budgetCents: Cents = None  # type: ignore[assignment]
-    currency: Currency = None  # type: ignore[assignment]
-    notes: Text(2000, multiline=True) = None  # type: ignore[assignment]
+    type: NonNull(EventType) = None
+    title: NonNull(Text(120, min_len=1)) = None
+    eventDate: NonNull(DateStr) = None
+    attendance: NonNull(Int(1, 100000)) = None
+    location: NonNull(Text(120)) = None
+    budgetCents: NonNull(Cents) = None
+    currency: NonNull(Currency) = None
+    notes: NonNull(Text(2000, multiline=True)) = None
+    shiftTaskDates: NonNull(Annotated[bool, Field(strict=True)]) = None
 
 
 class CategoryIn(StrictModel):
@@ -65,8 +74,8 @@ class CategoryIn(StrictModel):
 
 
 class CategoryPatch(StrictModel):
-    name: Text(80, min_len=1) = None  # type: ignore[assignment]
-    plannedCents: Cents = None  # type: ignore[assignment]
+    name: NonNull(Text(80, min_len=1)) = None
+    plannedCents: NonNull(Cents) = None
 
 
 class ExpenseIn(StrictModel):
@@ -78,11 +87,11 @@ class ExpenseIn(StrictModel):
 
 
 class ExpensePatch(StrictModel):
-    categoryId: RecordId = None  # type: ignore[assignment]
+    categoryId: NonNull(RecordId) = None
     vendorId: RecordId | None = None
-    description: Text(200, min_len=1) = None  # type: ignore[assignment]
-    amountCents: PositiveCents = None  # type: ignore[assignment]
-    spentOn: DateStr = None  # type: ignore[assignment]
+    description: NonNull(Text(200, min_len=1)) = None
+    amountCents: NonNull(PositiveCents) = None
+    spentOn: NonNull(DateStr) = None
 
 
 class TaskIn(StrictModel):
@@ -96,13 +105,13 @@ class TaskIn(StrictModel):
 
 
 class TaskPatch(StrictModel):
-    title: Text(120, min_len=1) = None  # type: ignore[assignment]
-    description: Text(1000, multiline=True) = None  # type: ignore[assignment]
+    title: NonNull(Text(120, min_len=1)) = None
+    description: NonNull(Text(1000, multiline=True)) = None
     dueDate: DateStr | None = None
-    status: TaskStatus = None  # type: ignore[assignment]
-    category: Text(80) = None  # type: ignore[assignment]
+    status: NonNull(TaskStatus) = None
+    category: NonNull(Text(80)) = None
     vendorId: RecordId | None = None
-    dependsOn: IdList = None  # type: ignore[assignment]
+    dependsOn: NonNull(IdList) = None
 
 
 class VendorIn(StrictModel):
@@ -114,14 +123,20 @@ class VendorIn(StrictModel):
 
 
 class VendorPatch(StrictModel):
-    name: Text(80, min_len=1) = None  # type: ignore[assignment]
-    category: Text(80) = None  # type: ignore[assignment]
-    status: VendorStatus = None  # type: ignore[assignment]
+    name: NonNull(Text(80, min_len=1)) = None
+    category: NonNull(Text(80)) = None
+    status: NonNull(VendorStatus) = None
     quoteCents: Cents | None = None
-    contact: Text(1000, multiline=True) = None  # type: ignore[assignment]
+    contact: NonNull(Text(1000, multiline=True)) = None
 
 
 class PlanRequest(StrictModel):
     preferences: Text(1000, multiline=True) = ""
     instruction: Text(1000, multiline=True) = ""
     parentId: RecordId | None = None
+
+
+class PlanApplyIn(StrictModel):
+    categories: Annotated[list[Text(80, min_len=1)], Field(max_length=12)] | None = None
+    tasks: Annotated[list[Text(120, min_len=1)], Field(max_length=40)] | None = None
+    includeVendors: Annotated[bool, Field(strict=True)] = False

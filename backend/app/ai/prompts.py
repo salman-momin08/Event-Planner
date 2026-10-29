@@ -17,10 +17,10 @@ Rules:
 - Respond with a single JSON object and nothing else (no prose, no markdown), matching exactly this shape:
   {"summary": string, "assumptions": string[], "themes": [{"name": string, "description": string}],
    "budgetAllocations": [{"category": string, "percent": number}],
-   "tasks": [{"title": string, "description": string, "category": string, "daysBeforeEvent": integer}],
+   "tasks": [{"title": string, "description": string, "category": string, "daysBeforeEvent": integer, "dependsOn": string[]}],
    "vendorSuggestions": [{"category": string, "guidance": string}]}
 - budgetAllocations percentages are numbers between 0 and 100 whose sum must not exceed 100. Do not output currency amounts.
-- Task timing is expressed only as daysBeforeEvent (0 to 730). Do not output calendar dates.
+- Task timing is expressed only as daysBeforeEvent (0 to 730). Do not output calendar dates. Optional dependsOn lists titles of prerequisite tasks from the same plan (without cycles).
 - At most 5 themes, 12 budget categories, 40 tasks, 10 vendor suggestions. Titles and category names must be unique.
 - vendorSuggestions give generic guidance on what to look for. Never invent vendor names, contact details, URLs or prices.
 - For task "revise", change previousPlan according to "instruction" and return the complete updated plan.

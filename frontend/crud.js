@@ -32,7 +32,9 @@ export function deleteButton({ what, remove }) {
   return button('Delete', {
     variant: 'danger',
     onClick: async () => {
-      if (confirmAction(`Delete ${what}? This cannot be undone.`)) await remove();
+      if (await confirmAction(`Delete ${what}? This cannot be undone.`, { title: 'Confirm deletion', confirmLabel: 'Delete', variant: 'danger' })) {
+        await remove();
+      }
     },
   });
 }

@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, Request, Response
 
 from ..context import Context
 from ..deps import current_user, get_ctx, require_user
-from ..schemas import DeleteAccountIn, LoginIn, RegisterIn
+from ..schemas import ChangePasswordIn, DeleteAccountIn, LoginIn, RegisterIn
 from ..security import client_ip, enforce
 from ..services import auth
 
@@ -48,6 +48,18 @@ async def logout(request: Request, ctx: Context = Depends(get_ctx), user: dict =
 @router.get("/me")
 async def me(user: dict = Depends(require_user)):
     return user
+
+
+@router.post("/password", status_code=204)
+async def change_password(
+    body: ChangePasswordIn, request: Request, ctx: Context = Depends(get_ctx), user: dict = Depends(require_user)
+):
+    ip = client_ip(request, ctx.settings.trust_proxy)
+    enforce(ctx.limiters["login_account"], f"pw|{user['id']}", "Too many password attempts. Try again later.")
+    token = await auth.change_password(ctx, user, body, ip)
+    response = Response(status_code=204)
+    _set_session_cookie(response, ctx, token, ctx.settings.session_ttl_seconds)
+    return response
 
 
 @router.delete("/me", status_code=204)
