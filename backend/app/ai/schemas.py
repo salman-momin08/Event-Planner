@@ -138,6 +138,10 @@ def validate_plan(raw: Any) -> dict:
     for b in dumped["budgetAllocations"]:
         b["percent"] = round(b["percent"], 2)
     for t in dumped["tasks"]:
+        d = int(t["daysBeforeEvent"])
+        if d > 45:
+            d = max(1, min(45, round(d / 10)))
+        t["daysBeforeEvent"] = d
         if not t.get("dependsOn"):
             t.pop("dependsOn", None)
     return dumped

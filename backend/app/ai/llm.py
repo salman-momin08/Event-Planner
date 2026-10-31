@@ -26,8 +26,14 @@ def _role_of(msg: BaseMessage) -> str:
     return "user"
 
 
-def _serialize_messages(messages: list[BaseMessage]) -> list[dict[str, str]]:
-    return [{"role": _role_of(m), "content": str(m.content)} for m in messages]
+def _serialize_messages(messages: list[BaseMessage]) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    for m in messages:
+        if isinstance(m.content, list):
+            out.append({"role": _role_of(m), "content": m.content})
+        else:
+            out.append({"role": _role_of(m), "content": str(m.content)})
+    return out
 
 
 def _extract_content(data: dict[str, Any]) -> str:

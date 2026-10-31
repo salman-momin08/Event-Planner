@@ -7,10 +7,12 @@ from ..context import Context
 from ..money import cents_to_decimal
 from .budget import list_categories, list_expenses
 from .events import to_event
+from .guests import list_guests
+from .schedule import list_schedule
 from .tasks import list_tasks
 from .vendors import list_vendors
 
-CSV_SECTIONS = ("tasks", "expenses", "vendors")
+CSV_SECTIONS = ("tasks", "expenses", "vendors", "guests", "schedule")
 # Cells beginning with these characters can be executed as formulas by spreadsheet apps (SEC-015).
 _FORMULA_START = re.compile(r"^[=+\-@\t\r\n]")
 
@@ -27,6 +29,8 @@ def export_json(ctx: Context, event: sqlite3.Row) -> dict:
         "expenses": list_expenses(ctx, event["id"]),
         "tasks": list_tasks(ctx, event["id"]),
         "vendors": list_vendors(ctx, event["id"]),
+        "guests": list_guests(ctx, event["id"]),
+        "schedule": list_schedule(ctx, event["id"]),
     }
 
 
@@ -64,6 +68,16 @@ def export_csv(ctx: Context, event: sqlite3.Row, section: str) -> str:
         return _to_csv(
             ["Date", "Description", "Category", f"Amount ({event['currency']})"],
             [[x["spentOn"], x["description"], names.get(x["categoryId"]), _amount(x["amountCents"])] for x in list_expenses(ctx, event_id)],
+        )
+    if section == "guests":
+        return _to_csv(
+            ["Name", "Contact", "RSVP Status", "Party Size", "Dietary", "Table / Group", "Notes"],
+            [[g["name"], g["contact"], g["rsvpStatus"], g["partySize"], g["dietary"], g["tableGroup"], g["notes"]] for g in list_guests(ctx, event_id)],
+        )
+    if section == "schedule":
+        return _to_csv(
+            ["Start Time", "End Time", "Duration (min)", "Activity", "Location / Zone", "Point of Contact", "Notes"],
+            [[s["startTime"], s["endTime"], s["durationMinutes"], s["title"], s["locationZone"], s["owner"], s["notes"]] for s in list_schedule(ctx, event_id)],
         )
     return _to_csv(
         ["Name", "Category", "Status", f"Quote ({event['currency']})", "Contact notes"],

@@ -29,14 +29,6 @@ export function announce(message) {
   setTimeout(() => (region.textContent = message), 50);
 }
 
-export function focusHeading(root = document) {
-  const heading = root.querySelector('h1, h2');
-  if (heading) {
-    heading.setAttribute('tabindex', '-1');
-    heading.focus();
-  }
-}
-
 export function formatMoney(cents, currency = 'USD') {
   return new Intl.NumberFormat(undefined, { style: 'currency', currency }).format(cents / 100);
 }
@@ -58,9 +50,9 @@ export function formatDate(iso) {
 
 export const label = (map, key) => map[key] ?? key;
 
-export const TASK_STATUS = { todo: '○ To do', in_progress: '◐ In progress', done: '✔ Done' };
-export const VENDOR_STATUS = { researching: 'Researching', contacted: 'Contacted', quoted: 'Quoted', booked: '✔ Booked', declined: 'Declined' };
-export const BUDGET_STATUS = { on_track: '✔ On track', near_limit: '⚠ Near limit (90%+)', over: '⛔ Over budget' };
+export const TASK_STATUS = { todo: 'To do', in_progress: 'In progress', done: 'Done' };
+export const VENDOR_STATUS = { researching: 'Researching', contacted: 'Contacted', quoted: 'Quoted', booked: 'Booked', declined: 'Declined' };
+export const BUDGET_STATUS = { on_track: 'On track', near_limit: 'Near limit (90%+)', over: 'Over budget' };
 export const EVENT_TYPE = { wedding: 'Wedding', birthday: 'Birthday', community: 'Community event' };
 
 export function alertBox(message, kind = 'info') {
@@ -77,7 +69,7 @@ export function showBanner(message) {
   main.prepend(h('div', { class: 'banner' }, alertBox(message, 'error')));
 }
 
-export function button(text, { onClick, variant = '', type = 'button' } = {}) {
+export function button(text, { onClick, variant = 'secondary', type = 'button' } = {}) {
   const handler =
     onClick &&
     (async (event) => {
@@ -87,7 +79,7 @@ export function button(text, { onClick, variant = '', type = 'button' } = {}) {
         showBanner(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
       }
     });
-  return h('button', { type, class: `btn ${variant}`.trim(), onclick: handler }, text);
+  return h('button', { type, class: `btn ${variant || 'secondary'}`.trim(), onclick: handler }, text);
 }
 
 let uid = 0;
@@ -245,7 +237,7 @@ function readField(spec, control) {
 }
 
 /** Accessible form: labelled fields, hints, per-field errors, error summary that receives focus. */
-export function formView({ fields, submitLabel, initial = {}, onSubmit, onCancel }) {
+export function formView({ fields, submitLabel, submitVariant = 'primary', initial = {}, onSubmit, onCancel }) {
   const controls = new Map();
   const summary = h('div', { class: 'error-summary', tabindex: '-1', hidden: true });
   const form = h('form', { novalidate: true });
@@ -255,8 +247,8 @@ export function formView({ fields, submitLabel, initial = {}, onSubmit, onCancel
     controls.set(spec.name, c);
     grid.append(c.el);
   }
-  const submit = h('button', { type: 'submit', class: 'btn primary' }, submitLabel);
-  form.append(summary, grid, h('div', { class: 'actions' }, submit, onCancel ? button('Cancel', { onClick: onCancel }) : null));
+  const submit = h('button', { type: 'submit', class: `btn ${submitVariant || 'primary'}`.trim() }, submitLabel);
+  form.append(summary, grid, h('div', { class: 'actions' }, submit, onCancel ? button('Cancel', { variant: 'tertiary', onClick: onCancel }) : null));
 
   function showErrors(errors, general) {
     const items = [];
@@ -311,7 +303,9 @@ export function formView({ fields, submitLabel, initial = {}, onSubmit, onCancel
     setTimeout(() => {
       for (const spec of fields) {
         const c = controls.get(spec.name);
-        c.el.querySelector('.field-control')?.classList.toggle('has-value', (spec.kind === 'select' ? c.input.value : c.input.value.trim()) !== '');
+        if (spec.kind === 'multiselect') continue;
+        const val = spec.kind === 'select' ? c.input.value : c.input.value.trim();
+        c.el.querySelector('.field-control')?.classList.toggle('has-value', val !== '' || spec.kind === 'select' || spec.kind === 'date');
       }
     }, 0);
   });
@@ -366,8 +360,8 @@ export function confirmAction(message, { title = 'Confirm action', confirmLabel 
       }
       resolve(result);
     };
-    const cancelBtn = h('button', { type: 'button', class: 'btn', onclick: () => finish(false) }, 'Cancel');
-    const confirmBtn = h('button', { type: 'button', class: `btn ${variant}`.trim(), onclick: () => finish(true) }, confirmLabel);
+    const cancelBtn = h('button', { type: 'button', class: 'btn tertiary', onclick: () => finish(false) }, 'Cancel');
+    const confirmBtn = h('button', { type: 'button', class: `btn ${variant || 'primary'}`.trim(), onclick: () => finish(true) }, confirmLabel);
     const dialog = h(
       'dialog',
       {

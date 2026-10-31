@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import sqlite3
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
 
-from ..ai import plans
+from ..ai import decor, plans
 from ..context import Context
 from ..deps import get_ctx, owned_event, require_user
-from ..schemas import PlanApplyIn, PlanRequest
+from ..schemas import DecorAnalyzeIn, DecorApplyIn, DecorPatchIn, PlanApplyIn, PlanRequest
 
 router = APIRouter()
 
@@ -50,3 +50,44 @@ async def apply_plan(
 @router.post("/events/{event_id:int}/ai/plans/{plan_id:int}/discard")
 async def discard_plan(plan_id: int, event: sqlite3.Row = Depends(owned_event), ctx: Context = Depends(get_ctx)):
     return plans.discard_plan(ctx, event["id"], plan_id)
+
+
+@router.get("/events/{event_id:int}/ai/decor")
+async def list_decor(event: sqlite3.Row = Depends(owned_event), ctx: Context = Depends(get_ctx)):
+    return decor.list_decor_analyses(ctx, event["id"])
+
+
+@router.post("/events/{event_id:int}/ai/decor", status_code=201)
+async def create_decor(
+    body: DecorAnalyzeIn,
+    event: sqlite3.Row = Depends(owned_event),
+    ctx: Context = Depends(get_ctx),
+    user: dict = Depends(require_user),
+):
+    return await decor.analyze_decor(ctx, user, event, body)
+
+
+@router.post("/events/{event_id:int}/ai/decor/{decor_id:int}/apply")
+async def apply_decor(
+    decor_id: int,
+    body: DecorApplyIn | None = None,
+    event: sqlite3.Row = Depends(owned_event),
+    ctx: Context = Depends(get_ctx),
+):
+    return decor.apply_decor_analysis(ctx, event, decor_id, body)
+
+
+@router.patch("/events/{event_id:int}/ai/decor/{decor_id:int}")
+async def patch_decor(
+    decor_id: int,
+    body: DecorPatchIn,
+    event: sqlite3.Row = Depends(owned_event),
+    ctx: Context = Depends(get_ctx),
+):
+    return decor.update_decor_analysis(ctx, event["id"], decor_id, body)
+
+
+@router.delete("/events/{event_id:int}/ai/decor/{decor_id:int}", status_code=204)
+async def delete_decor(decor_id: int, event: sqlite3.Row = Depends(owned_event), ctx: Context = Depends(get_ctx)):
+    decor.delete_decor_analysis(ctx, event["id"], decor_id)
+    return Response(status_code=204)

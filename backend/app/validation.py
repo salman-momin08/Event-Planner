@@ -61,6 +61,26 @@ def _unique_ids(values: list[int]) -> list[int]:
     return list(dict.fromkeys(values))
 
 
+_TIME_RE = re.compile(r"^([01]\d|2[0-3]):([0-5]\d)$")
+_DATA_IMAGE_RE = re.compile(r"^data:image/(?:jpeg|png|webp);base64,[A-Za-z0-9+/=\s]+$")
+
+
+def _time_str(value: str) -> str:
+    s = value.strip()
+    if not _TIME_RE.match(s):
+        raise ValueError("Must be a valid 24-hour time in HH:MM format (e.g. 18:30)")
+    return s
+
+
+def _image_data_url(value: str) -> str:
+    s = value.strip()
+    if not s:
+        return ""
+    if len(s) > 48000 or not _DATA_IMAGE_RE.match(s):
+        raise ValueError("Must be a base64 JPEG, PNG, or WebP data URL under 48 KB")
+    return re.sub(r"\s+", "", s)
+
+
 def _reject_null(value: object) -> object:
     if value is None:
         raise ValueError("Must not be null")
@@ -74,6 +94,8 @@ def NonNull(tp: type[T]) -> type[T | None]:
 
 Email = Annotated[str, Field(strict=True), AfterValidator(_email)]
 DateStr = Annotated[str, Field(strict=True), AfterValidator(_date)]
+TimeStr = Annotated[str, Field(strict=True), AfterValidator(_time_str)]
+ImageDataUrl = Annotated[str, Field(strict=True), AfterValidator(_image_data_url)]
 Cents = Int(0, MAX_CENTS)
 PositiveCents = Int(1, MAX_CENTS)
 RecordId = Int(1, 2**62)

@@ -8,6 +8,9 @@ export default defineConfig({
   server: {
     port: 5173,
     strictPort: true,
+    headers: {
+      'Cache-Control': 'no-store',
+    },
     proxy: {
       // changeOrigin:false keeps the Host header as the dev-server host so backend's Origin==Host check passes.
       '/api': { target: 'http://127.0.0.1:3000', changeOrigin: false },

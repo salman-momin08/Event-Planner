@@ -105,7 +105,7 @@ def test_config():
     assert load_settings({"APP_ENV": "production"}).cookie_secure
     # Gemini & OpenAI auto-detection and defaults
     gem = load_settings({"GEMINI_API_KEY": "g-key"})
-    assert gem.ai.enabled and gem.ai.provider == "gemini" and gem.ai.model_id == "gemini-2.5-flash"
+    assert gem.ai.enabled and gem.ai.provider == "gemini" and gem.ai.model_id == "gemini-3-flash-preview"
     oai = load_settings({"OPENAI_API_KEY": "sk-key"})
     assert oai.ai.enabled and oai.ai.provider == "openai" and oai.ai.model_id == "gpt-4o-mini"
     assert load_settings({"AI_BASE_URL": "http://localhost:8080"}).ai.enabled

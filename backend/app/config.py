@@ -85,7 +85,7 @@ def _endpoint(raw: str, name: str = "AI_BASE_URL") -> str:
 
 
 DEFAULT_MODELS = {
-    "gemini": "gemini-2.5-flash",
+    "gemini": "gemini-3-flash-preview",
     "openai": "gpt-4o-mini",
 }
 DEFAULT_ENDPOINTS = {

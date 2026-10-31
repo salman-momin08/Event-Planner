@@ -9,7 +9,7 @@ from ..context import Context
 from ..deps import get_ctx, owned_event, require_user
 from ..errors import ApiError
 from ..schemas import EventIn, EventPatch
-from ..services import budget, events, tasks, vendors
+from ..services import budget, events, guests, tasks, vendors
 from ..services.export import CSV_SECTIONS, export_csv, export_json
 
 router = APIRouter(prefix="/events")
@@ -51,6 +51,7 @@ async def summary(event: sqlite3.Row = Depends(owned_event), ctx: Context = Depe
         "budget": budget.summarize(ctx, event),
         "tasks": tasks.task_stats(ctx, event["id"]),
         "vendors": vendors.vendor_stats(ctx, event["id"]),
+        "guests": guests.guest_stats(ctx, event["id"]),
     }
 
 

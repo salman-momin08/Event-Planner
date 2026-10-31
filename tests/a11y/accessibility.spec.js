@@ -57,7 +57,7 @@ test.describe('WCAG 2.2 AA — real rendered UI', () => {
     await expect(page).toHaveURL(/#\/events\/\d+$/);
 
     const base = new URL(page.url()).hash.replace(/^#\//, '');
-    const sections = ['', 'budget', 'tasks', 'timeline', 'vendors', 'ai', 'export'];
+    const sections = ['', 'budget', 'tasks', 'timeline', 'vendors', 'decor', 'invitation', 'ai', 'export'];
     for (const section of sections) {
       await gotoView(page, `#/${base}${section ? `/${section}` : ''}`);
       const violations = await scan(page);

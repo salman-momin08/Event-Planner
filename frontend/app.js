@@ -5,6 +5,7 @@ import { eventsListView, exportSection, newEventView, overviewSection } from './
 import { budgetSection } from './views/budget.js';
 import { tasksSection, timelineSection, vendorsSection } from './views/planning.js';
 import { aiSection } from './views/ai.js';
+import { decorSection, invitationSection } from './views/studio.js';
 
 const state = { user: null };
 const main = document.getElementById('main');
@@ -14,8 +15,10 @@ const SECTIONS = [
   ['overview', 'Overview', overviewSection],
   ['budget', 'Budget', budgetSection],
   ['tasks', 'Tasks', tasksSection],
-  ['timeline', 'Timeline', timelineSection],
+  ['timeline', 'Timeline & Run-of-Show', timelineSection],
   ['vendors', 'Vendors', vendorsSection],
+  ['decor', 'Decor Studio', decorSection],
+  ['invitation', 'Invitation Card', invitationSection],
   ['ai', 'AI assistant', aiSection],
   ['export', 'Export', exportSection],
 ];
@@ -51,7 +54,7 @@ function breadcrumbNav(items) {
       { class: 'breadcrumb-list' },
       items.map(([href, text], i) => {
         const isLast = i === items.length - 1;
-        return h('li', null, href && !isLast ? h('a', { href }, text) : h('span', { 'aria-current': isLast ? 'page' : undefined }, text));
+        return h('li', null, href && !isLast ? h('a', { href }, i === 0 ? ` ${text}` : text) : h('span', { 'aria-current': isLast ? 'page' : undefined }, text));
       }),
     ),
   );
@@ -61,13 +64,14 @@ function renderNav() {
   const current = location.hash;
   const brandLink = document.querySelector('.brand');
   if (brandLink) brandLink.setAttribute('href', state.user ? '#/events' : '#/login');
-  const link = (href, text) => h('li', null, h('a', { href, 'aria-current': current === href || current.startsWith(`${href}/`) ? 'page' : undefined }, text));
+  const link = (href, text, cls) =>
+    h('li', null, h('a', { href, class: cls, 'aria-current': current === href || current.startsWith(`${href}/`) ? 'page' : undefined }, text));
   const ul = h(
     'ul',
     { class: 'nav-list' },
     ...(state.user
-      ? [link('#/events', 'Events'), link('#/account', 'Account'), h('li', null, button('Sign out', { onClick: signOut }))]
-      : [link('#/login', 'Sign in'), link('#/register', 'Create account')]),
+      ? [link('#/events', 'Events'), link('#/account', 'Account'), h('li', null, button('Sign out', { variant: 'danger', onClick: signOut }))]
+      : [link('#/login', 'Sign in', 'sign-in-link'), link('#/register', 'Create account')]),
   );
   enableArrowNav(ul);
   nav.replaceChildren(ul);
@@ -86,14 +90,25 @@ async function onAuthenticated(user) {
 }
 
 function notFoundView() {
-  return { title: 'Not found', node: h('div', null, h('h1', null, 'Page not found'), h('p', null, h('a', { href: '#/events' }, 'Back to your events'))) };
+  return {
+    title: 'Not found',
+    node: h(
+      'div',
+      null,
+      breadcrumbNav([
+        ['#/events', 'All events'],
+        [null, 'Not found'],
+      ]),
+      h('h1', null, 'Page not found'),
+      h('p', null, 'The requested page or event could not be found.'),
+    ),
+  };
 }
 
 async function eventView(id, section, ctx) {
   const ev = await get(`/events/${id}`);
   const entry = SECTIONS.find(([key]) => key === section);
   if (!entry) return notFoundView();
-  const content = await entry[2](ev, ctx);
   const subnavList = h(
     'ul',
     { class: 'subnav' },
@@ -102,8 +117,20 @@ async function eventView(id, section, ctx) {
     ),
   );
   enableArrowNav(subnavList);
-  const trail = [['#/events', '← All events']];
-  if (section === 'overview') trail.push([null, ev.title]);
+  let content;
+  try {
+    content = await entry[2](ev, ctx);
+  } catch (err) {
+    content = h(
+      'div',
+      null,
+      alertBox(err instanceof ApiError ? err.message : 'Could not load this section. Please try again.', 'error'),
+      h('p', null, button('Retry section', { onClick: () => ctx.refresh() })),
+    );
+  }
+  const isOverview = section === 'overview';
+  const trail = [['#/events', 'All events']];
+  if (isOverview) trail.push([null, ev.title]);
   else {
     trail.push([`#/events/${id}`, ev.title]);
     trail.push([null, entry[1]]);

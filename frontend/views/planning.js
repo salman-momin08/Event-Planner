@@ -2,7 +2,7 @@ import { del, get, patch, post } from '../api.js';
 import { TASK_STATUS, VENDOR_STATUS, button, dataTable, emptyState, formView, formatDate, formatMoney, h } from '../dom.js';
 import { deleteButton, editButton } from '../crud.js';
 
-const flags = (t) => [t.overdue ? '⚠ Overdue' : null, t.blocked ? '⛔ Blocked' : null].filter(Boolean).join(' · ');
+const flags = (t) => [t.overdue ? 'Overdue' : null, t.blocked ? 'Blocked' : null].filter(Boolean).join(' ');
 
 export async function tasksSection(ev, { refresh }) {
   const [tasks, vendors] = await Promise.all([get(`/events/${ev.id}/tasks`), get(`/events/${ev.id}/vendors`)]);
@@ -55,7 +55,7 @@ export async function tasksSection(ev, { refresh }) {
       ],
       empty: emptyState(
         'No tasks yet. Add one below, or generate a ready-made timeline.',
-        h('a', { class: 'btn', href: `#/events/${ev.id}/timeline` }, 'Generate timeline'),
+        h('a', { class: 'btn secondary', href: `#/events/${ev.id}/timeline` }, 'Generate timeline'),
       ),
     }),
     h(
@@ -73,7 +73,8 @@ export async function tasksSection(ev, { refresh }) {
 }
 
 export async function timelineSection(ev, { refresh }) {
-  const tl = await get(`/events/${ev.id}/timeline`);
+  const [tl, scheduleItems] = await Promise.all([get(`/events/${ev.id}/timeline`), get(`/events/${ev.id}/schedule`)]);
+  const base = `/events/${ev.id}`;
   const groups = new Map();
   for (const t of tl.dated) {
     const key = t.dueDate.slice(0, 7);
@@ -91,18 +92,73 @@ export async function timelineSection(ev, { refresh }) {
       h('span', { class: 'sub' }, TASK_STATUS[t.status]),
       flags(t) ? h('span', { class: 'flag' }, ` ${flags(t)}`) : null,
     );
+
+  const scheduleFields = [
+    { name: 'startTime', label: 'Start time (HH:MM, 24h)', required: true, max: 5, hint: 'For example 17:30 or 09:00' },
+    { name: 'durationMinutes', label: 'Duration (minutes)', kind: 'number', required: true, min: 5, max: 720 },
+    { name: 'title', label: 'Activity / cue', required: true, max: 120 },
+    { name: 'locationZone', label: 'Zone / stage area', max: 80, hint: 'For example Main Lawn, Reception Hall, Foyer' },
+    { name: 'owner', label: 'Point of contact', max: 80, hint: 'For example Coordinator, DJ, Catering Lead' },
+    { name: 'notes', label: 'Cue notes', kind: 'textarea', rows: 2, max: 400 },
+  ];
+
   return h(
     'div',
     null,
-    h('h2', null, 'Timeline'),
+    h('h2', null, 'Timeline & Event-Day Run-of-Show'),
     h('p', null, `Today is ${formatDate(tl.today)}. The event is on ${formatDate(ev.eventDate)}.`),
+    h('h3', null, 'Event-Day Run-of-Show (Hour-by-Hour Cue Sheet)'),
+    h(
+      'p',
+      null,
+      button('Generate event-day run-of-show template', {
+        variant: 'primary',
+        onClick: async () => {
+          const r = await post(`${base}/schedule/generate-template`);
+          await refresh(`${r.created} run-of-show cue${r.created === 1 ? '' : 's'} added, ${r.skipped} already existed.`);
+        },
+      }),
+    ),
+    dataTable({
+      caption: 'Event-day run-of-show schedule',
+      columns: [
+        { header: 'Time slot', cell: (s) => `${s.startTime} – ${s.endTime} (${s.durationMinutes}m)` },
+        { header: 'Activity / Cue', cell: (s) => [s.title, s.notes ? h('span', { class: 'sub' }, s.notes) : null] },
+        { header: 'Zone', cell: (s) => s.locationZone || '—' },
+        { header: 'Point of Contact', cell: (s) => s.owner || '—' },
+      ],
+      rows: scheduleItems,
+      actions: (s) => [
+        editButton({
+          fields: scheduleFields,
+          initial: s,
+          save: async (v) => (await patch(`${base}/schedule/${s.id}`, v), refresh('Run-of-show item saved.')),
+        }),
+        deleteButton({
+          what: `cue “${s.title}”`,
+          remove: async () => (await del(`${base}/schedule/${s.id}`), refresh('Run-of-show item deleted.')),
+        }),
+      ],
+      empty: emptyState('No event-day run-of-show cues yet. Generate a ready-made schedule above or add custom time slots below.'),
+    }),
+    h(
+      'details',
+      null,
+      h('summary', null, 'Add an event-day time slot'),
+      formView({
+        fields: scheduleFields,
+        initial: { startTime: '18:00', durationMinutes: 45 },
+        submitLabel: 'Add time slot',
+        onSubmit: async (v) => (await post(`${base}/schedule`, v), refresh('Run-of-show time slot added.')),
+      }),
+    ),
+    h('h3', null, 'Pre-Event Preparation Milestones'),
     h(
       'p',
       null,
       button('Generate timeline from template', {
-        variant: 'primary',
         onClick: async () => {
-          const r = await post(`/events/${ev.id}/timeline/generate-template`);
+          const r = await post(`${base}/timeline/generate-template`);
           await refresh(`${r.created} task${r.created === 1 ? '' : 's'} added, ${r.skipped} already existed.`);
         },
       }),
@@ -118,13 +174,13 @@ export async function timelineSection(ev, { refresh }) {
             h(
               'section',
               null,
-              h('h3', null, new Date(`${month}-01T00:00:00Z`).toLocaleDateString(undefined, { timeZone: 'UTC', month: 'long', year: 'numeric' })),
+              h('h4', null, new Date(`${month}-01T00:00:00Z`).toLocaleDateString(undefined, { timeZone: 'UTC', month: 'long', year: 'numeric' })),
               h('ol', { class: 'timeline' }, list.map(item)),
             ),
           ),
-          tl.undated.length ? h('section', null, h('h3', null, 'No date'), h('ul', { class: 'timeline' }, tl.undated.map(item))) : null,
+          tl.undated.length ? h('section', null, h('h4', null, 'No date'), h('ul', { class: 'timeline' }, tl.undated.map(item))) : null,
         ]
-      : emptyState('Your timeline is empty. Generate one from a template, or add dated tasks on the Tasks page.'),
+      : emptyState('Your pre-event timeline is empty. Generate one from a template, or add dated tasks on the Tasks page.'),
   );
 }
 

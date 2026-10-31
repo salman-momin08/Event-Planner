@@ -11,12 +11,19 @@ from ..schemas import (
     CategoryPatch,
     ExpenseIn,
     ExpensePatch,
+    GuestIn,
+    GuestPatch,
+    InvitationAiDraftIn,
+    InvitationUpdateIn,
+    ScheduleItemIn,
+    ScheduleItemPatch,
     TaskIn,
     TaskPatch,
     VendorIn,
     VendorPatch,
 )
-from ..services import budget, tasks, templates, vendors
+from ..deps import get_ctx, owned_event, require_user
+from ..services import budget, guests, invitations, schedule, tasks, templates, vendors
 
 router = APIRouter(prefix="/events/{event_id:int}")
 
@@ -116,3 +123,76 @@ async def patch_vendor(vendor_id: int, body: VendorPatch, event: sqlite3.Row = D
 async def delete_vendor(vendor_id: int, event: sqlite3.Row = Depends(owned_event), ctx: Context = Depends(get_ctx)):
     vendors.delete_vendor(ctx, event["id"], vendor_id)
     return Response(status_code=204)
+
+
+# --- guests & RSVP ---
+@router.get("/guests")
+async def list_guests(event: sqlite3.Row = Depends(owned_event), ctx: Context = Depends(get_ctx)):
+    return {"guests": guests.list_guests(ctx, event["id"]), "stats": guests.guest_stats(ctx, event["id"])}
+
+
+@router.post("/guests", status_code=201)
+async def create_guest(body: GuestIn, event: sqlite3.Row = Depends(owned_event), ctx: Context = Depends(get_ctx)):
+    return guests.create_guest(ctx, event["id"], body)
+
+
+@router.patch("/guests/{guest_id:int}")
+async def patch_guest(guest_id: int, body: GuestPatch, event: sqlite3.Row = Depends(owned_event), ctx: Context = Depends(get_ctx)):
+    return guests.update_guest(ctx, event["id"], guest_id, body)
+
+
+@router.delete("/guests/{guest_id:int}", status_code=204)
+async def delete_guest(guest_id: int, event: sqlite3.Row = Depends(owned_event), ctx: Context = Depends(get_ctx)):
+    guests.delete_guest(ctx, event["id"], guest_id)
+    return Response(status_code=204)
+
+
+# --- event-day run-of-show schedule ---
+@router.get("/schedule")
+async def list_schedule(event: sqlite3.Row = Depends(owned_event), ctx: Context = Depends(get_ctx)):
+    return schedule.list_schedule(ctx, event["id"])
+
+
+@router.post("/schedule", status_code=201)
+async def create_schedule_item(body: ScheduleItemIn, event: sqlite3.Row = Depends(owned_event), ctx: Context = Depends(get_ctx)):
+    return schedule.create_schedule_item(ctx, event["id"], body)
+
+
+@router.patch("/schedule/{item_id:int}")
+async def patch_schedule_item(
+    item_id: int, body: ScheduleItemPatch, event: sqlite3.Row = Depends(owned_event), ctx: Context = Depends(get_ctx)
+):
+    return schedule.update_schedule_item(ctx, event["id"], item_id, body)
+
+
+@router.delete("/schedule/{item_id:int}", status_code=204)
+async def delete_schedule_item(item_id: int, event: sqlite3.Row = Depends(owned_event), ctx: Context = Depends(get_ctx)):
+    schedule.delete_schedule_item(ctx, event["id"], item_id)
+    return Response(status_code=204)
+
+
+@router.post("/schedule/generate-template")
+async def generate_schedule_template(event: sqlite3.Row = Depends(owned_event), ctx: Context = Depends(get_ctx)):
+    return schedule.generate_default_schedule(ctx, event)
+
+
+# --- invitation card studio ---
+@router.get("/invitation")
+async def get_invitation(event: sqlite3.Row = Depends(owned_event), ctx: Context = Depends(get_ctx)):
+    return invitations.get_invitation(ctx, event)
+
+
+@router.put("/invitation")
+@router.post("/invitation")
+async def save_invitation(body: InvitationUpdateIn, event: sqlite3.Row = Depends(owned_event), ctx: Context = Depends(get_ctx)):
+    return invitations.save_invitation(ctx, event, body)
+
+
+@router.post("/invitation/ai-draft")
+async def draft_invitation_copy(
+    body: InvitationAiDraftIn | None = None,
+    event: sqlite3.Row = Depends(owned_event),
+    ctx: Context = Depends(get_ctx),
+    user: dict = Depends(require_user),
+):
+    return await invitations.draft_invitation_copy(ctx, user, event, body or InvitationAiDraftIn())

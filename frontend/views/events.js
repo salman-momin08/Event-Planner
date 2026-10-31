@@ -57,7 +57,7 @@ export function newEventView({ navigate }) {
     h(
       'ol',
       { class: 'breadcrumb-list' },
-      h('li', null, h('a', { href: '#/events' }, '← All events')),
+      h('li', null, h('a', { href: '#/events' }, 'All events')),
       h('li', null, h('span', { 'aria-current': 'page' }, 'Create event')),
     ),
   );
@@ -68,6 +68,7 @@ export async function overviewSection(ev, { refresh, navigate }) {
   const s = await get(`/events/${ev.id}/summary`);
   const b = s.budget;
   const money = (c) => formatMoney(c, ev.currency);
+  const spentPct = b.totalCents > 0 ? Math.round((b.spentCents / b.totalCents) * 100) : 0;
   const editForm = formView({
     fields: eventFields,
     initial: ev,
@@ -82,50 +83,82 @@ export async function overviewSection(ev, { refresh, navigate }) {
     null,
     h('h2', null, 'Overview'),
     h(
-      'dl',
-      { class: 'facts' },
-      h('dt', null, 'Type'),
-      h('dd', null, EVENT_TYPE[ev.type]),
-      h('dt', null, 'Date'),
-      h('dd', null, formatDate(ev.eventDate)),
-      h('dt', null, 'Expected attendance'),
-      h('dd', null, ev.attendance),
-      h('dt', null, 'Location'),
-      h('dd', null, ev.location || 'Not set'),
-      h('dt', null, 'Notes'),
-      h('dd', { class: 'prewrap' }, ev.notes || 'None'),
-    ),
-    h('h3', null, 'Budget'),
-    h(
-      'dl',
-      { class: 'facts' },
-      h('dt', null, 'Total budget'),
-      h('dd', null, money(b.totalCents)),
-      h('dt', null, 'Spent'),
-      h('dd', null, money(b.spentCents)),
-      h('dt', null, 'Remaining'),
-      h('dd', null, b.overBudget ? `⛔ Over budget by ${money(-b.remainingCents)}` : `✔ ${money(b.remainingCents)} left`),
+      'div',
+      { class: 'overview-grid' },
+      h(
+        'section',
+        { class: 'overview-col' },
+        h('h3', null, 'Event details'),
+        h(
+          'dl',
+          { class: 'facts' },
+          h('dt', null, 'Type'),
+          h('dd', null, EVENT_TYPE[ev.type]),
+          h('dt', null, 'Date'),
+          h('dd', null, formatDate(ev.eventDate)),
+          h('dt', null, 'Expected attendance'),
+          h('dd', null, ev.attendance),
+          h('dt', null, 'Location'),
+          h('dd', null, ev.location || 'Not set'),
+          h('dt', null, 'Notes'),
+          h('dd', { class: 'prewrap' }, ev.notes || 'None'),
+        ),
+      ),
+      h(
+        'section',
+        { class: 'overview-col' },
+        h('h3', null, 'Budget'),
+        h(
+          'dl',
+          { class: 'facts' },
+          h('dt', null, 'Spending progress'),
+          h(
+            'dd',
+            { class: 'progress-row' },
+            h(
+              'progress',
+              {
+                max: b.totalCents || 1,
+                value: b.totalCents > 0 ? Math.min(b.spentCents, b.totalCents) : 0,
+                'aria-label': 'Share of total budget spent',
+              },
+              `${spentPct}%`,
+            ),
+            h('span', { class: 'progress-pct' }, `${spentPct}%`),
+          ),
+          h('dt', null, 'Total budget'),
+          h('dd', null, money(b.totalCents)),
+          h('dt', null, 'Spent'),
+          h('dd', null, money(b.spentCents)),
+          h('dt', null, 'Remaining'),
+          h('dd', null, b.overBudget ? `Over budget by ${money(-b.remainingCents)}` : `${money(b.remainingCents)} left`),
+        ),
+      ),
+      h(
+        'section',
+        { class: 'overview-col' },
+        h('h3', null, 'Progress'),
+        h(
+          'dl',
+          { class: 'facts' },
+          h('dt', null, 'Tasks done'),
+          h('dd', null, `${s.tasks.done} of ${s.tasks.total}`),
+          h('dt', null, 'Overdue tasks'),
+          h('dd', null, String(s.tasks.overdue)),
+          h('dt', null, 'Blocked tasks'),
+          h('dd', null, String(s.tasks.blocked)),
+          h('dt', null, 'Vendors booked'),
+          h('dd', null, `${s.vendors.booked} of ${s.vendors.total}`),
+        ),
+      ),
     ),
     b.overAllocated
-      ? h('p', { class: 'alert warn', role: 'status' }, `⚠ Category budgets add up to ${money(b.allocatedCents)}, more than your total budget.`)
+      ? h('p', { class: 'alert warn', role: 'status' }, `Category budgets add up to ${money(b.allocatedCents)}, more than your total budget.`)
       : null,
-    h('h3', null, 'Progress'),
-    h(
-      'dl',
-      { class: 'facts' },
-      h('dt', null, 'Tasks done'),
-      h('dd', null, `${s.tasks.done} of ${s.tasks.total}`),
-      h('dt', null, 'Overdue tasks'),
-      h('dd', null, s.tasks.overdue ? `⚠ ${s.tasks.overdue}` : '0'),
-      h('dt', null, 'Blocked tasks'),
-      h('dd', null, s.tasks.blocked ? `⛔ ${s.tasks.blocked}` : '0'),
-      h('dt', null, 'Vendors booked'),
-      h('dd', null, `${s.vendors.booked} of ${s.vendors.total}`),
-    ),
     s.tasks.total === 0
       ? emptyState(
           'No tasks yet. Generate a timeline from a template, ask the AI assistant for a draft, or add tasks yourself.',
-          h('a', { class: 'btn', href: `#/events/${ev.id}/timeline` }, 'Go to timeline'),
+          h('a', { class: 'btn secondary', href: `#/events/${ev.id}/timeline` }, 'Go to timeline'),
         )
       : null,
     h('details', null, h('summary', null, 'Edit event details'), editForm),
@@ -163,6 +196,7 @@ export function exportSection(ev) {
       link('Tasks (CSV)', 'format=csv&section=tasks'),
       link('Expenses (CSV)', 'format=csv&section=expenses'),
       link('Vendors (CSV)', 'format=csv&section=vendors'),
+      link('Event-Day Run-of-Show (CSV)', 'format=csv&section=schedule'),
     ),
   );
 }

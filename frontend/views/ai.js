@@ -1,7 +1,7 @@
 import { get, post } from '../api.js';
 import { announce, button, confirmAction, emptyState, formView, formatMoney, h } from '../dom.js';
 
-const STATUS = { draft: 'Draft (not applied)', applied: '✔ Applied', discarded: 'Discarded' };
+const STATUS = { draft: 'Draft (not applied)', applied: 'Applied', discarded: 'Discarded' };
 
 const percentToCents = (totalCents, percent) => Math.floor((totalCents * Math.round(percent * 100)) / 10000);
 
@@ -179,7 +179,7 @@ function draftCard(ev, p, base, refresh, aiAvailable) {
           );
         },
       }),
-      button('Discard', { onClick: async () => (await post(`${base}/${p.id}/discard`), refresh('Draft discarded.')) }),
+      button('Discard', { variant: 'tertiary', onClick: async () => (await post(`${base}/${p.id}/discard`), refresh('Draft discarded.')) }),
     );
   }
   const revise = aiAvailable

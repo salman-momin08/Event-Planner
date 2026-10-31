@@ -16,12 +16,18 @@ from ..services.budget import LIMITS as BUDGET_LIMITS
 from ..services.tasks import LIMITS as TASK_LIMITS
 from ..services.vendors import MAX_VENDORS
 from .graph import run_plan_graph
+from .guardrails import inspect_ai_input
 from .prompts import PROMPT_VERSION, build_context, context_json
 
 MAX_PLANS_PER_EVENT = 50
 
 
 def _plan(r: sqlite3.Row) -> dict:
+    plan_data = json.loads(r["plan_json"])
+    for t in plan_data.get("tasks", []):
+        d = int(t.get("daysBeforeEvent", 0))
+        if d > 45:
+            t["daysBeforeEvent"] = max(1, min(45, round(d / 10)))
     return {
         "id": r["id"],
         "eventId": r["event_id"],
@@ -29,7 +35,7 @@ def _plan(r: sqlite3.Row) -> dict:
         "status": r["status"],
         "instruction": r["instruction"],
         "preferences": r["preferences"],
-        "plan": json.loads(r["plan_json"]),
+        "plan": plan_data,
         "promptVersion": r["prompt_version"],
         "model": r["model"],
         "createdAt": r["created_at"],
@@ -61,6 +67,12 @@ async def create_draft(ctx: Context, user: dict, event: sqlite3.Row, body: PlanR
         )
     if body.instruction and body.parentId is None:
         raise bad_request({"parentId": "A revision instruction requires parentId"})
+
+    inspect_ai_input(
+        ctx,
+        user["id"],
+        {"preferences": body.preferences, "instruction": body.instruction},
+    )
 
     previous_plan = json.loads(_row(ctx, event["id"], body.parentId)["plan_json"]) if body.parentId else None
     n = ctx.db.execute("SELECT COUNT(*) AS n FROM ai_plan_versions WHERE event_id = ?", (event["id"],)).fetchone()["n"]

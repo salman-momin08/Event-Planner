@@ -32,7 +32,7 @@ def valid_plan() -> dict:
             {"category": "Catering", "percent": 33.33},
         ],
         "tasks": [
-            {"title": "Book venue", "description": "Visit three venues", "category": "Venue", "daysBeforeEvent": 120},
+            {"title": "Book venue", "description": "Visit three venues", "category": "Venue", "daysBeforeEvent": 30},
             {"title": "Send invitations", "description": "", "category": "Guests", "daysBeforeEvent": 45},
         ],
         "vendorSuggestions": [{"category": "Catering", "guidance": "Ask about dietary options."}],
@@ -101,6 +101,9 @@ class Client:
 
     def post(self, path, body=None, **kw):
         return self.request("POST", "/api/v1" + path, body, **kw)
+
+    def put(self, path, body=None, **kw):
+        return self.request("PUT", "/api/v1" + path, body, **kw)
 
     def patch(self, path, body=None, **kw):
         return self.request("PATCH", "/api/v1" + path, body, **kw)

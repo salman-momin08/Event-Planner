@@ -169,7 +169,7 @@ def test_025_026_template_timeline(setup):
     c.post(f"/events/{w['id']}/tasks", {"title": "book venue"})
     gen = c.post(f"/events/{w['id']}/timeline/generate-template")
     assert gen.json["skipped"] == 1
-    assert next(t for t in c.get(f"/events/{w['id']}/tasks").json if t["title"] == "Book caterer")["dueDate"] == "2026-09-15"
+    assert next(t for t in c.get(f"/events/{w['id']}/tasks").json if t["title"] == "Book caterer")["dueDate"] == "2027-05-16"
 
 
 def test_030_031_vendors(setup):

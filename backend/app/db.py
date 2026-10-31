@@ -109,7 +109,81 @@ CREATE TABLE security_events (
 CREATE INDEX idx_security_events_at ON security_events(at);
 """
 
-MIGRATIONS = [SCHEMA_V1]
+SCHEMA_V2 = """
+CREATE TABLE guests (
+  id INTEGER PRIMARY KEY,
+  event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  contact TEXT NOT NULL DEFAULT '',
+  rsvp_status TEXT NOT NULL DEFAULT 'pending'
+    CHECK (rsvp_status IN ('pending','attending','declined','maybe')),
+  party_size INTEGER NOT NULL DEFAULT 1 CHECK (party_size >= 1 AND party_size <= 20),
+  dietary TEXT NOT NULL DEFAULT 'none'
+    CHECK (dietary IN ('none','vegetarian','vegan','halal','kosher','gluten_free','nut_allergy','other')),
+  table_group TEXT NOT NULL DEFAULT '',
+  notes TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL
+);
+CREATE INDEX idx_guests_event ON guests(event_id);
+CREATE TABLE schedule_items (
+  id INTEGER PRIMARY KEY,
+  event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+  start_time TEXT NOT NULL,
+  duration_minutes INTEGER NOT NULL DEFAULT 30 CHECK (duration_minutes >= 5 AND duration_minutes <= 720),
+  title TEXT NOT NULL,
+  location_zone TEXT NOT NULL DEFAULT '',
+  owner TEXT NOT NULL DEFAULT '',
+  notes TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX idx_schedule_event ON schedule_items(event_id, start_time);
+CREATE TABLE decor_analyses (
+  id INTEGER PRIMARY KEY,
+  event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+  space_type TEXT NOT NULL
+    CHECK (space_type IN ('open_garden','party_hall','house_room','rooftop','banquet_lawn','other')),
+  custom_space_type TEXT NOT NULL DEFAULT '',
+  lighting_mood TEXT NOT NULL DEFAULT 'warm_ambient',
+  style_pref TEXT NOT NULL DEFAULT '',
+  has_image INTEGER NOT NULL DEFAULT 0,
+  analysis_json TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','applied')),
+  model TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX idx_decor_event ON decor_analyses(event_id, created_at);
+CREATE TABLE invitations (
+  event_id INTEGER PRIMARY KEY REFERENCES events(id) ON DELETE CASCADE,
+  headline TEXT NOT NULL DEFAULT '',
+  subheadline TEXT NOT NULL DEFAULT '',
+  host_line TEXT NOT NULL DEFAULT '',
+  body_text TEXT NOT NULL DEFAULT '',
+  rsvp_contact TEXT NOT NULL DEFAULT '',
+  rsvp_deadline TEXT NOT NULL DEFAULT '',
+  dress_code TEXT NOT NULL DEFAULT '',
+  theme_style TEXT NOT NULL DEFAULT 'royal_indigo',
+  layout_style TEXT NOT NULL DEFAULT 'classic_crest',
+  updated_at TEXT NOT NULL
+);
+"""
+
+SCHEMA_V3 = """
+DROP TABLE IF EXISTS invitations;
+CREATE TABLE invitations (
+  event_id INTEGER PRIMARY KEY REFERENCES events(id) ON DELETE CASCADE,
+  headline TEXT NOT NULL DEFAULT '',
+  subheadline TEXT NOT NULL DEFAULT '',
+  host_line TEXT NOT NULL DEFAULT '',
+  body_text TEXT NOT NULL DEFAULT '',
+  rsvp_contact TEXT NOT NULL DEFAULT '',
+  rsvp_deadline TEXT NOT NULL DEFAULT '',
+  dress_code TEXT NOT NULL DEFAULT '',
+  theme_style TEXT NOT NULL DEFAULT 'royal_indigo',
+  layout_style TEXT NOT NULL DEFAULT 'classic_crest',
+  updated_at TEXT NOT NULL
+);
+"""
+
+MIGRATIONS = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3]
 
 
 def open_database(path: str = ":memory:") -> sqlite3.Connection:

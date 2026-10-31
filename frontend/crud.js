@@ -3,6 +3,7 @@ import { button, confirmAction, formView, h } from './dom.js';
 /** Inline edit: inserts a form row under the clicked table row. */
 export function editButton({ fields, initial, save }) {
   const btn = button('Edit', {
+    variant: 'tertiary',
     onClick: () => {
       const row = btn.closest('tr');
       const open = row.nextElementSibling;

@@ -3,7 +3,8 @@ from __future__ import annotations
 import sqlite3
 
 from ..context import Context
-from ..db import is_unique_violation, update_row
+from ..dates import to_date_string
+from ..db import is_unique_violation, transaction, update_row
 from ..errors import bad_request, conflict, limit_reached, not_found
 from ..schemas import CategoryIn, CategoryPatch, ExpenseIn, ExpensePatch
 
@@ -45,27 +46,83 @@ def _get_category(ctx: Context, event_id: int, category_id: int) -> dict:
     return _category(row)
 
 
+def _sync_category_spent(ctx: Context, event_id: int, category_id: int, target_spent_cents: int) -> None:
+    current_spent = int(
+        ctx.db.execute(
+            "SELECT COALESCE(SUM(amount_cents), 0) AS s FROM expenses WHERE event_id = ? AND category_id = ?",
+            (event_id, category_id),
+        ).fetchone()["s"]
+    )
+    if target_spent_cents == current_spent:
+        return
+    if target_spent_cents == 0:
+        ctx.db.execute("DELETE FROM expenses WHERE event_id = ? AND category_id = ?", (event_id, category_id))
+        return
+    if target_spent_cents > current_spent:
+        diff = target_spent_cents - current_spent
+        today = to_date_string(ctx.clock())
+        adj = ctx.db.execute(
+            "SELECT id, amount_cents FROM expenses WHERE event_id = ? AND category_id = ? AND description = 'Spent amount' ORDER BY id DESC LIMIT 1",
+            (event_id, category_id),
+        ).fetchone()
+        if adj is not None:
+            ctx.db.execute(
+                "UPDATE expenses SET amount_cents = ? WHERE id = ? AND event_id = ?",
+                (int(adj["amount_cents"]) + diff, adj["id"], event_id),
+            )
+        else:
+            _check_limit(ctx, "expenses", event_id, LIMITS["expenses"], "expenses")
+            ctx.db.execute(
+                """INSERT INTO expenses (event_id, category_id, vendor_id, description, amount_cents, spent_on)
+                   VALUES (?, ?, NULL, 'Spent amount', ?, ?)""",
+                (event_id, category_id, diff, today),
+            )
+    else:
+        # Replace category expenses with the exact updated spent amount
+        today = to_date_string(ctx.clock())
+        ctx.db.execute("DELETE FROM expenses WHERE event_id = ? AND category_id = ?", (event_id, category_id))
+        ctx.db.execute(
+            """INSERT INTO expenses (event_id, category_id, vendor_id, description, amount_cents, spent_on)
+               VALUES (?, ?, NULL, 'Spent amount', ?, ?)""",
+            (event_id, category_id, target_spent_cents, today),
+        )
+
+
 def create_category(ctx: Context, event_id: int, body: CategoryIn) -> dict:
     _check_limit(ctx, "budget_categories", event_id, LIMITS["categories"], "budget categories")
     try:
-        cur = ctx.db.execute(
-            "INSERT INTO budget_categories (event_id, name, planned_cents) VALUES (?, ?, ?)",
-            (event_id, body.name, body.plannedCents),
-        )
+        with transaction(ctx.db):
+            cur = ctx.db.execute(
+                "INSERT INTO budget_categories (event_id, name, planned_cents) VALUES (?, ?, ?)",
+                (event_id, body.name, body.plannedCents),
+            )
+            cat_id = int(cur.lastrowid)
+            if body.spentCents is not None and body.spentCents > 0:
+                _sync_category_spent(ctx, event_id, cat_id, body.spentCents)
     except sqlite3.IntegrityError as err:
         if is_unique_violation(err):
             raise conflict("A category with this name already exists") from None
         raise
-    return _get_category(ctx, event_id, int(cur.lastrowid))
+    return _get_category(ctx, event_id, cat_id)
 
 
 def update_category(ctx: Context, event_id: int, category_id: int, body: CategoryPatch) -> dict:
     _get_category(ctx, event_id, category_id)
+    data = body.model_dump(exclude_unset=True)
+    spent_cents = data.pop("spentCents", None)
     try:
-        update_row(
-            ctx.db, "budget_categories", {"name": "name", "plannedCents": "planned_cents"},
-            body.model_dump(exclude_unset=True), "id = ? AND event_id = ?", (category_id, event_id),
-        )
+        with transaction(ctx.db):
+            if data:
+                update_row(
+                    ctx.db,
+                    "budget_categories",
+                    {"name": "name", "plannedCents": "planned_cents"},
+                    data,
+                    "id = ? AND event_id = ?",
+                    (category_id, event_id),
+                )
+            if spent_cents is not None:
+                _sync_category_spent(ctx, event_id, category_id, int(spent_cents))
     except sqlite3.IntegrityError as err:
         if is_unique_violation(err):
             raise conflict("A category with this name already exists") from None

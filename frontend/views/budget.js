@@ -14,6 +14,7 @@ export async function budgetSection(ev, { refresh }) {
   const categoryFields = [
     { name: 'name', label: 'Category name', required: true, max: 80 },
     { name: 'plannedCents', label: 'Planned amount', kind: 'money', hint: 'Leave empty for 0' },
+    { name: 'spentCents', label: 'Spent amount', kind: 'money', hint: 'Leave empty for 0' },
   ];
   const expenseFields = [
     { name: 'description', label: 'What was it for?', required: true, max: 200 },
@@ -30,36 +31,38 @@ export async function budgetSection(ev, { refresh }) {
     },
   ];
 
+  const spentPct = b.totalCents > 0 ? Math.round((b.spentCents / b.totalCents) * 100) : 0;
+
   return h(
     'div',
     null,
     h('h2', null, 'Budget'),
+    b.totalCents === 0 ? alertBox('Set a total budget in the event details to see spending progress.') : null,
     h(
       'dl',
       { class: 'facts' },
+      h('dt', null, 'Spending progress'),
+      h(
+        'dd',
+        { class: 'progress-row' },
+        h(
+          'progress',
+          { max: b.totalCents || 1, value: b.totalCents > 0 ? Math.min(b.spentCents, b.totalCents) : 0, 'aria-label': 'Share of total budget spent' },
+          `${spentPct}%`,
+        ),
+        h('span', { class: 'progress-pct' }, `${spentPct}%`),
+      ),
       h('dt', null, 'Total budget'),
       h('dd', null, money(b.totalCents)),
       h('dt', null, 'Allocated to categories'),
       h('dd', null, money(b.allocatedCents)),
       h('dt', null, 'Not yet allocated'),
-      h('dd', null, b.overAllocated ? `⚠ Over-allocated by ${money(-b.unallocatedCents)}` : money(b.unallocatedCents)),
+      h('dd', null, b.overAllocated ? `Over-allocated by ${money(-b.unallocatedCents)}` : money(b.unallocatedCents)),
       h('dt', null, 'Spent'),
       h('dd', null, money(b.spentCents)),
       h('dt', null, 'Remaining'),
-      h('dd', null, b.overBudget ? `⛔ Over budget by ${money(-b.remainingCents)}` : `✔ ${money(b.remainingCents)}`),
+      h('dd', null, b.overBudget ? `Over budget by ${money(-b.remainingCents)}` : money(b.remainingCents)),
     ),
-    b.totalCents > 0
-      ? h(
-          'p',
-          null,
-          h(
-            'progress',
-            { max: b.totalCents, value: Math.min(b.spentCents, b.totalCents), 'aria-label': 'Share of total budget spent' },
-            `${Math.round((b.spentCents / b.totalCents) * 100)}%`,
-          ),
-          ` ${Math.round((b.spentCents / b.totalCents) * 100)}% of total budget spent`,
-        )
-      : alertBox('Set a total budget in the event details to see spending progress.'),
 
     h('h3', null, 'Categories'),
     dataTable({

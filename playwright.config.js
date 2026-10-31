@@ -36,6 +36,7 @@ export default defineConfig({
       HOST: '127.0.0.1',
       PORT: String(PORT),
       APP_ENV: 'development',
+      UVICORN_RELOAD: '0',
       COOKIE_SECURE: 'false',
       DATABASE_PATH: DB_PATH,
     },
