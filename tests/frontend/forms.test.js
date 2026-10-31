@@ -83,6 +83,45 @@ describe('formView validation and submission', () => {
     expect(onSubmit).not.toHaveBeenCalled();
     expect(form.querySelector('.field-error').textContent).toContain('amount');
   });
+
+  it('renders a floating label wrapper that toggles has-value on input', () => {
+    const form = mount(
+      formView({
+        fields: [{ name: 'title', label: 'Title', required: true }],
+        submitLabel: 'Save',
+        onSubmit: vi.fn(),
+      }),
+    );
+    const wrap = form.querySelector('.field-control');
+    const input = form.querySelector('input[name="title"]');
+    expect(wrap).not.toBeNull();
+    expect(wrap.classList.contains('has-value')).toBe(false);
+    input.value = 'Gala';
+    input.dispatchEvent(new window.Event('input'));
+    expect(wrap.classList.contains('has-value')).toBe(true);
+  });
+
+  it('toggles is-open on select-wrap for chevron open/close animation', () => {
+    const form = mount(
+      formView({
+        fields: [{ name: 'type', label: 'Type', kind: 'select', options: [['wedding', 'Wedding'], ['birthday', 'Birthday']] }],
+        submitLabel: 'Save',
+        onSubmit: vi.fn(),
+      }),
+    );
+    const wrap = form.querySelector('.field-control.select-wrap');
+    const select = form.querySelector('select[name="type"]');
+    expect(wrap).not.toBeNull();
+    expect(wrap.classList.contains('is-open')).toBe(false);
+    select.dispatchEvent(new window.MouseEvent('mousedown'));
+    expect(wrap.classList.contains('is-open')).toBe(true);
+    select.dispatchEvent(new window.Event('change'));
+    expect(wrap.classList.contains('is-open')).toBe(false);
+    select.dispatchEvent(new window.KeyboardEvent('keydown', { key: ' ' }));
+    expect(wrap.classList.contains('is-open')).toBe(true);
+    select.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape' }));
+    expect(wrap.classList.contains('is-open')).toBe(false);
+  });
 });
 
 describe('ApiError', () => {

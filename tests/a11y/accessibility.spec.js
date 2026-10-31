@@ -10,6 +10,7 @@ async function scan(page) {
 
 // Waits for the SPA to finish rendering a view (main always holds a focusable heading afterwards).
 async function gotoView(page, hash) {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto(`/${hash}`);
   await expect(page.locator('#main h1, #main h2').first()).toBeVisible();
 }

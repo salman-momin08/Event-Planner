@@ -43,9 +43,22 @@ npm audit                                 # frontend dependency audit
 with an ephemeral SQLite database. Set `HF_TOKEN` (+ `HF_MODEL_ID`) to also run the opt-in live-model
 test in `tests/test_ai_live.py`, which is skipped otherwise.
 
-## Enable the AI assistant
-1. Create a Hugging Face access token (read / Inference Providers permission).
-2. In `backend/.env` set `HF_TOKEN` and `HF_MODEL_ID` (a chat/instruct model you can call through Inference Providers), or set `HF_ENDPOINT_URL` for a dedicated endpoint / self-hosted TGI server.
-3. Restart. `GET /api/v1/ai/status` reports `{"available": true}` and the **AI assistant** tab becomes active.
+## Enable the AI assistant (Gemini Free Tier or OpenAI)
+1. **Google Gemini (Free Tier for testing)** — Create a free API key in Google AI Studio (`https://aistudio.google.com/apikey`), then set in `backend/.env`:
+   ```ini
+   AI_PROVIDER=gemini
+   GEMINI_API_KEY=your_gemini_api_key_here
+   # Optional (defaults to gemini-2.5-flash):
+   # AI_MODEL=gemini-2.5-flash
+   ```
+2. **OpenAI (or Production / OpenAI-compatible endpoints)** — Set in `backend/.env`:
+   ```ini
+   AI_PROVIDER=openai
+   OPENAI_API_KEY=sk-...
+   # Optional (defaults to gpt-4o-mini and https://api.openai.com/v1):
+   # AI_MODEL=gpt-4o-mini
+   # AI_BASE_URL=https://api.openai.com/v1
+   ```
+3. Restart the backend. `GET /api/v1/ai/status` reports `{"available": true}` and the **AI assistant** tab becomes active. To switch from free-tier testing to production keys later, simply update `AI_PROVIDER`, `GEMINI_API_KEY` / `OPENAI_API_KEY`, and `AI_MODEL` in your environment variables—no code changes required.
 
 Event data (type, date, attendance, location, budget, your request text) is sent to the configured provider; names, emails, notes, vendors and expenses are not. LangChain/LangSmith tracing is force-disabled. See [secrets-and-configuration](.agents/security/secrets-and-configuration.md). Never commit `.env`.

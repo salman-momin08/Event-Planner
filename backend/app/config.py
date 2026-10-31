@@ -74,14 +74,24 @@ def _bool(env: Mapping[str, str], name: str, default: bool) -> bool:
     raise ConfigError(f"Invalid {name}: expected true/false")
 
 
-def _endpoint(raw: str) -> str:
+def _endpoint(raw: str, name: str = "AI_BASE_URL") -> str:
     if not raw:
         return ""
     url = urlparse(raw)
     local = (url.hostname or "") in LOCAL_HOSTS
     if url.scheme == "https" or (url.scheme == "http" and local):
         return raw.rstrip("/")
-    raise ConfigError("HF_ENDPOINT_URL must use https (http is allowed only for localhost)")
+    raise ConfigError(f"{name} must use https (http is allowed only for localhost)")
+
+
+DEFAULT_MODELS = {
+    "gemini": "gemini-2.5-flash",
+    "openai": "gpt-4o-mini",
+}
+DEFAULT_ENDPOINTS = {
+    "gemini": "https://generativelanguage.googleapis.com/v1beta/openai",
+    "openai": "https://api.openai.com/v1",
+}
 
 
 def load_settings(env: Mapping[str, str] | None = None) -> Settings:
@@ -103,18 +113,59 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
             warnings.append("SECURITY_LOG_KEY is not set; audit-log IP pseudonyms will not persist across restarts")
         security_log_key = secrets.token_bytes(32)
 
-    token = env.get("HF_TOKEN") or env.get("HUGGINGFACEHUB_API_TOKEN") or ""
-    model_id = env.get("HF_MODEL_ID", "")
-    endpoint_url = _endpoint(env.get("HF_ENDPOINT_URL", ""))
-    local_endpoint = bool(endpoint_url) and (urlparse(endpoint_url).hostname or "") in LOCAL_HOSTS
-    enabled = bool(model_id or endpoint_url) and bool(token or local_endpoint)
+    raw_provider = (env.get("AI_PROVIDER") or "").strip().lower()
+    gemini_key = env.get("GEMINI_API_KEY") or env.get("GOOGLE_API_KEY") or ""
+    openai_key = env.get("OPENAI_API_KEY") or ""
+    hf_token = env.get("HF_TOKEN") or env.get("HUGGINGFACEHUB_API_TOKEN") or ""
+    ai_key = env.get("AI_API_KEY") or ""
+
+    raw_base_url = env.get("AI_BASE_URL") or env.get("OPENAI_BASE_URL") or ""
+    raw_hf_url = env.get("HF_ENDPOINT_URL") or ""
+
+    if raw_provider and raw_provider not in {"gemini", "openai", "huggingface", "hf", "auto"}:
+        raise ConfigError("Invalid AI_PROVIDER: expected gemini, openai, huggingface, or auto")
+
+    if raw_provider in {"huggingface", "hf"} or (
+        not raw_provider
+        and not gemini_key
+        and not openai_key
+        and not ai_key
+        and not raw_base_url
+        and (hf_token or raw_hf_url or env.get("HF_MODEL_ID"))
+    ):
+        provider = env.get("HF_PROVIDER", "auto") or "auto"
+        token = ai_key or hf_token
+        model_id = env.get("AI_MODEL") or env.get("HF_MODEL_ID") or ""
+        endpoint_url = _endpoint(raw_hf_url or raw_base_url, "HF_ENDPOINT_URL")
+        local_endpoint = bool(endpoint_url) and (urlparse(endpoint_url).hostname or "") in LOCAL_HOSTS
+        enabled = bool(model_id or endpoint_url) and bool(token or local_endpoint)
+    else:
+        if raw_provider == "gemini" or (not raw_provider and gemini_key):
+            provider = "gemini"
+            token = ai_key or gemini_key
+        elif raw_provider == "openai" or (not raw_provider and (openai_key or ai_key or raw_base_url)):
+            provider = "openai"
+            token = ai_key or openai_key or gemini_key
+        else:
+            provider = "gemini"
+            token = ""
+
+        endpoint_url = _endpoint(raw_base_url or DEFAULT_ENDPOINTS.get(provider, ""), "AI_BASE_URL") if (token or raw_base_url) else ""
+        local_endpoint = bool(raw_base_url) and (urlparse(endpoint_url).hostname or "") in LOCAL_HOSTS
+        model_id = (
+            env.get("AI_MODEL")
+            or env.get("GEMINI_MODEL")
+            or env.get("OPENAI_MODEL")
+            or (DEFAULT_MODELS.get(provider, "") if (token or local_endpoint) else "")
+        )
+        enabled = bool(model_id or endpoint_url) and bool(token or local_endpoint)
 
     ai = AiSettings(
         enabled=enabled,
         model_id=model_id,
         token=token,
         endpoint_url=endpoint_url,
-        provider=env.get("HF_PROVIDER", "auto") or "auto",
+        provider=provider,
         timeout_s=_int(env, "AI_TIMEOUT_SECONDS", 30, 1, 120),
         max_new_tokens=_int(env, "AI_MAX_OUTPUT_TOKENS", 2500, 100, 8000),
         daily_limit=_int(env, "AI_DAILY_LIMIT", 20, 1, 1000),

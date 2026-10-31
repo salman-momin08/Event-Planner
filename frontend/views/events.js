@@ -45,12 +45,23 @@ export function newEventView({ navigate }) {
     fields: eventFields,
     initial: { currency: 'USD', type: 'wedding' },
     submitLabel: 'Create event',
+    onCancel: () => navigate('#/events'),
     onSubmit: async (values) => {
       const ev = await post('/events', values);
       navigate(`#/events/${ev.id}`);
     },
   });
-  return { title: 'New event', node: h('div', { class: 'narrow' }, h('h1', null, 'Create event'), form) };
+  const breadcrumb = h(
+    'nav',
+    { class: 'breadcrumb', 'aria-label': 'Breadcrumb' },
+    h(
+      'ol',
+      { class: 'breadcrumb-list' },
+      h('li', null, h('a', { href: '#/events' }, '← All events')),
+      h('li', null, h('span', { 'aria-current': 'page' }, 'Create event')),
+    ),
+  );
+  return { title: 'New event', node: h('div', { class: 'narrow' }, breadcrumb, h('h1', null, 'Create event'), form) };
 }
 
 export async function overviewSection(ev, { refresh, navigate }) {

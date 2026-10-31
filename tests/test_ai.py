@@ -204,6 +204,28 @@ def test_graph_unit_run_and_failure():
     asyncio.run(go())
 
 
+def test_gemini_and_openai_integration_end_to_end_against_local_endpoint(make_app):
+    """Real OpenAICompatibleChatModel (Gemini / OpenAI) + LangGraph, talking to a local OpenAI-compatible server."""
+    with FakeTgi() as server:
+        for provider, key_env, default_model in (
+            ("gemini", {"GEMINI_API_KEY": "test-gemini-key"}, "gemini-2.5-flash"),
+            ("openai", {"OPENAI_API_KEY": "test-openai-key"}, "gpt-4o-mini"),
+        ):
+            env = {"AI_PROVIDER": provider, "AI_BASE_URL": server.url, **key_env}
+            app = make_app(env=env)
+            assert app.app.state.ctx.ai.available
+            c = app.sign_up()
+            ev = app.make_event(c)
+            r = c.post(f"/events/{ev['id']}/ai/plans", {"preferences": "garden"})
+            assert r.status == 201 and r.json["model"] == default_model
+            req = server.requests[-1]
+            assert req["path"].endswith("/chat/completions")
+            assert req["auth"].startswith("Bearer test-")
+            roles = [m["role"] for m in req["payload"]["messages"]]
+            assert roles == ["system", "user"]
+            assert json.loads(req["payload"]["messages"][1]["content"])["preferences"] == "garden"
+
+
 def test_hugging_face_integration_end_to_end_against_local_endpoint(make_app):
     """Real HuggingFaceEndpoint + ChatHuggingFace + LangGraph, talking to a local TGI-compatible server."""
     with FakeTgi() as tgi:

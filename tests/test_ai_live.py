@@ -1,9 +1,9 @@
-"""Opt-in integration test against a real Hugging Face provider.
+"""Opt-in integration test against a real Gemini, OpenAI, or Hugging Face provider.
 
-Skipped unless HF_TOKEN (and HF_MODEL_ID or HF_ENDPOINT_URL) are set, so the default suite stays
+Skipped unless GEMINI_API_KEY, OPENAI_API_KEY, or HF_TOKEN is set, so the default suite stays
 hermetic. Run it to verify the live model path end to end:
 
-    $env:HF_TOKEN="hf_..."; $env:HF_MODEL_ID="meta-llama/Llama-3.1-8B-Instruct"
+    $env:GEMINI_API_KEY="AIza..."
     python -m pytest tests/test_ai_live.py -q
 """
 from __future__ import annotations
@@ -12,15 +12,29 @@ import os
 
 import pytest
 
-_HAS_CREDS = bool(os.environ.get("HF_TOKEN")) and bool(
-    os.environ.get("HF_MODEL_ID") or os.environ.get("HF_ENDPOINT_URL")
+_HAS_CREDS = bool(
+    os.environ.get("GEMINI_API_KEY")
+    or os.environ.get("GOOGLE_API_KEY")
+    or os.environ.get("OPENAI_API_KEY")
+    or os.environ.get("AI_API_KEY")
+    or (os.environ.get("HF_TOKEN") and (os.environ.get("HF_MODEL_ID") or os.environ.get("HF_ENDPOINT_URL")))
 )
 
 pytestmark = pytest.mark.skipif(
-    not _HAS_CREDS, reason="set HF_TOKEN and HF_MODEL_ID/HF_ENDPOINT_URL to run the live AI test"
+    not _HAS_CREDS, reason="set GEMINI_API_KEY, OPENAI_API_KEY, or HF_TOKEN to run the live AI test"
 )
 
-_HF_ENV_KEYS = (
+_AI_ENV_KEYS = (
+    "AI_PROVIDER",
+    "AI_API_KEY",
+    "AI_MODEL",
+    "AI_BASE_URL",
+    "GEMINI_API_KEY",
+    "GOOGLE_API_KEY",
+    "GEMINI_MODEL",
+    "OPENAI_API_KEY",
+    "OPENAI_MODEL",
+    "OPENAI_BASE_URL",
     "HF_TOKEN",
     "HUGGINGFACEHUB_API_TOKEN",
     "HF_MODEL_ID",
@@ -32,7 +46,7 @@ _HF_ENV_KEYS = (
 
 
 def _live_env() -> dict[str, str]:
-    return {k: os.environ[k] for k in _HF_ENV_KEYS if os.environ.get(k)}
+    return {k: os.environ[k] for k in _AI_ENV_KEYS if os.environ.get(k)}
 
 
 def test_live_model_produces_a_valid_applicable_draft(make_app):

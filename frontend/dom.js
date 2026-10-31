@@ -137,7 +137,7 @@ function fieldEl(spec, initial) {
   const common = { id, name: spec.name, 'aria-describedby': describedBy };
   switch (spec.kind) {
     case 'textarea':
-      input = h('textarea', { ...common, rows: spec.rows ?? 3, maxlength: spec.max }, initial ?? '');
+      input = h('textarea', { ...common, placeholder: ' ', rows: spec.rows ?? 3, maxlength: spec.max }, initial ?? '');
       break;
     case 'select': {
       input = h(
@@ -155,24 +155,50 @@ function fieldEl(spec, initial) {
         ...common,
         type: 'text',
         inputmode: 'decimal',
+        placeholder: ' ',
         value: initial === null || initial === undefined ? '' : centsToInput(initial),
         autocomplete: 'off',
       });
       break;
     case 'number':
-      input = h('input', { ...common, type: 'number', min: spec.min, max: spec.max, step: 1, value: initial ?? '' });
+      input = h('input', { ...common, type: 'number', placeholder: ' ', min: spec.min, max: spec.max, step: 1, value: initial ?? '' });
       break;
     default:
-      input = h('input', { ...common, type: spec.kind ?? 'text', value: initial ?? '', maxlength: spec.max, autocomplete: spec.autocomplete });
+      input = h('input', {
+        ...common,
+        type: spec.kind ?? 'text',
+        placeholder: ' ',
+        value: initial ?? '',
+        maxlength: spec.max,
+        autocomplete: spec.autocomplete,
+      });
   }
-  const el = h(
-    'div',
-    { class: 'field' },
-    h('label', { for: id }, spec.label, spec.required ? h('span', { class: 'req' }, ' (required)') : null),
-    spec.hint ? h('p', { id: hintId, class: 'hint' }, spec.hint) : null,
-    input,
-    errorEl,
-  );
+  const labelEl = h('label', { for: id }, spec.label, spec.required ? h('span', { class: 'req' }, ' (required)') : null);
+  const controlWrap = h('div', { class: `field-control${spec.kind === 'select' ? ' select-wrap' : ''}` }, input, labelEl);
+  if (spec.kind === 'select') {
+    input.addEventListener('mousedown', () => {
+      if (document.activeElement === input) controlWrap.classList.toggle('is-open');
+      else controlWrap.classList.add('is-open');
+    });
+    input.addEventListener('keydown', (e) => {
+      if (e.key === ' ' || e.key === 'Enter' || (e.altKey && (e.key === 'ArrowDown' || e.key === 'ArrowUp'))) {
+        controlWrap.classList.add('is-open');
+      } else if (e.key === 'Escape' || e.key === 'Tab') {
+        controlWrap.classList.remove('is-open');
+      }
+    });
+    input.addEventListener('change', () => controlWrap.classList.remove('is-open'));
+    input.addEventListener('blur', () => controlWrap.classList.remove('is-open'));
+  }
+  const syncHasValue = () => {
+    const val = spec.kind === 'select' ? input.value : input.value.trim();
+    controlWrap.classList.toggle('has-value', val !== '' || spec.kind === 'select' || spec.kind === 'date');
+  };
+  syncHasValue();
+  input.addEventListener('input', syncHasValue);
+  input.addEventListener('change', syncHasValue);
+
+  const el = h('div', { class: 'field' }, controlWrap, spec.hint ? h('p', { id: hintId, class: 'hint' }, spec.hint) : null, errorEl);
   return {
     el,
     input,
@@ -280,6 +306,14 @@ export function formView({ fields, submitLabel, initial = {}, onSubmit, onCancel
       submit.removeAttribute('aria-disabled');
       submit.textContent = original;
     }
+  });
+  form.addEventListener('reset', () => {
+    setTimeout(() => {
+      for (const spec of fields) {
+        const c = controls.get(spec.name);
+        c.el.querySelector('.field-control')?.classList.toggle('has-value', (spec.kind === 'select' ? c.input.value : c.input.value.trim()) !== '');
+      }
+    }, 0);
   });
   return form;
 }

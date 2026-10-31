@@ -25,18 +25,52 @@ const navigate = (hash) => {
   else location.hash = hash;
 };
 
-function renderNav() {
-  const current = location.hash;
-  const link = (href, text) => h('li', null, h('a', { href, 'aria-current': current.startsWith(href) ? 'page' : undefined }, text));
-  nav.replaceChildren(
+function enableArrowNav(listEl) {
+  listEl.addEventListener('keydown', (e) => {
+    const items = [...listEl.querySelectorAll('a, button')];
+    const idx = items.indexOf(document.activeElement);
+    if (idx < 0) return;
+    let next = -1;
+    if (e.key === 'ArrowRight') next = (idx + 1) % items.length;
+    else if (e.key === 'ArrowLeft') next = (idx - 1 + items.length) % items.length;
+    else if (e.key === 'Home') next = 0;
+    else if (e.key === 'End') next = items.length - 1;
+    if (next >= 0) {
+      e.preventDefault();
+      items[next].focus();
+    }
+  });
+}
+
+function breadcrumbNav(items) {
+  return h(
+    'nav',
+    { class: 'breadcrumb', 'aria-label': 'Breadcrumb' },
     h(
-      'ul',
-      { class: 'nav-list' },
-      ...(state.user
-        ? [link('#/events', 'Events'), link('#/account', 'Account'), h('li', null, button('Sign out', { onClick: signOut }))]
-        : [link('#/login', 'Sign in'), link('#/register', 'Create account')]),
+      'ol',
+      { class: 'breadcrumb-list' },
+      items.map(([href, text], i) => {
+        const isLast = i === items.length - 1;
+        return h('li', null, href && !isLast ? h('a', { href }, text) : h('span', { 'aria-current': isLast ? 'page' : undefined }, text));
+      }),
     ),
   );
+}
+
+function renderNav() {
+  const current = location.hash;
+  const brandLink = document.querySelector('.brand');
+  if (brandLink) brandLink.setAttribute('href', state.user ? '#/events' : '#/login');
+  const link = (href, text) => h('li', null, h('a', { href, 'aria-current': current === href || current.startsWith(`${href}/`) ? 'page' : undefined }, text));
+  const ul = h(
+    'ul',
+    { class: 'nav-list' },
+    ...(state.user
+      ? [link('#/events', 'Events'), link('#/account', 'Account'), h('li', null, button('Sign out', { onClick: signOut }))]
+      : [link('#/login', 'Sign in'), link('#/register', 'Create account')]),
+  );
+  enableArrowNav(ul);
+  nav.replaceChildren(ul);
 }
 
 async function signOut() {
@@ -60,25 +94,29 @@ async function eventView(id, section, ctx) {
   const entry = SECTIONS.find(([key]) => key === section);
   if (!entry) return notFoundView();
   const content = await entry[2](ev, ctx);
+  const subnavList = h(
+    'ul',
+    { class: 'subnav' },
+    SECTIONS.map(([key, text]) =>
+      h('li', null, h('a', { href: `#/events/${id}${key === 'overview' ? '' : `/${key}`}`, 'aria-current': key === section ? 'page' : undefined }, text)),
+    ),
+  );
+  enableArrowNav(subnavList);
+  const trail = [['#/events', '← All events']];
+  if (section === 'overview') trail.push([null, ev.title]);
+  else {
+    trail.push([`#/events/${id}`, ev.title]);
+    trail.push([null, entry[1]]);
+  }
   return {
     title: `${ev.title} – ${entry[1]}`,
     node: h(
       'div',
       null,
-      h('p', null, h('a', { href: '#/events' }, '← All events')),
+      breadcrumbNav(trail),
       h('h1', null, ev.title),
       h('p', { class: 'sub' }, `${EVENT_TYPE[ev.type]} · ${formatDate(ev.eventDate)}`),
-      h(
-        'nav',
-        { 'aria-label': 'Event sections' },
-        h(
-          'ul',
-          { class: 'subnav' },
-          SECTIONS.map(([key, text]) =>
-            h('li', null, h('a', { href: `#/events/${id}${key === 'overview' ? '' : `/${key}`}`, 'aria-current': key === section ? 'page' : undefined }, text)),
-          ),
-        ),
-      ),
+      h('nav', { 'aria-label': 'Event sections' }, subnavList),
       content,
     ),
   };
@@ -175,8 +213,9 @@ async function render({ keepContext = false } = {}) {
   const heading = (keepContext && main.querySelector('h2')) || main.querySelector('h1');
   if (heading) {
     heading.setAttribute('tabindex', '-1');
-    heading.focus();
-    heading.scrollIntoView?.({ block: 'start' });
+    heading.focus({ preventScroll: true });
+    if (!keepContext) window.scrollTo(0, 0);
+    else heading.scrollIntoView?.({ block: 'nearest' });
   }
 }
 

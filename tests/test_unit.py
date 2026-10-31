@@ -103,6 +103,12 @@ def test_config():
     c = load_settings({})
     assert c.host == "127.0.0.1" and not c.ai.enabled and not c.cookie_secure
     assert load_settings({"APP_ENV": "production"}).cookie_secure
+    # Gemini & OpenAI auto-detection and defaults
+    gem = load_settings({"GEMINI_API_KEY": "g-key"})
+    assert gem.ai.enabled and gem.ai.provider == "gemini" and gem.ai.model_id == "gemini-2.5-flash"
+    oai = load_settings({"OPENAI_API_KEY": "sk-key"})
+    assert oai.ai.enabled and oai.ai.provider == "openai" and oai.ai.model_id == "gpt-4o-mini"
+    assert load_settings({"AI_BASE_URL": "http://localhost:8080"}).ai.enabled
     assert load_settings({"HF_TOKEN": "t", "HF_MODEL_ID": "m"}).ai.enabled
     assert not load_settings({"HF_MODEL_ID": "m"}).ai.enabled  # token missing
     assert load_settings({"HF_ENDPOINT_URL": "http://localhost:8080"}).ai.enabled  # local TGI needs no token
@@ -112,6 +118,10 @@ def test_config():
         load_settings({"PORT": "abc"})
     with pytest.raises(ConfigError):
         load_settings({"HF_ENDPOINT_URL": "http://example.com"})
+    with pytest.raises(ConfigError):
+        load_settings({"AI_BASE_URL": "http://example.com"})
+    with pytest.raises(ConfigError):
+        load_settings({"AI_PROVIDER": "unknown"})
     with pytest.raises(ConfigError):
         load_settings({"AI_MAX_REPAIRS": "9"})
 

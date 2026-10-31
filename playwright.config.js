@@ -5,8 +5,14 @@ import { rmSync } from 'node:fs';
 
 // Ephemeral SQLite file so the a11y run never touches real data and always starts empty.
 const DB_PATH = join(tmpdir(), 'planner-a11y.db');
-for (const suffix of ['', '-wal', '-shm']) {
-  rmSync(DB_PATH + suffix, { force: true });
+if (!process.env.TEST_WORKER_INDEX) {
+  for (const suffix of ['', '-wal', '-shm']) {
+    try {
+      rmSync(DB_PATH + suffix, { force: true });
+    } catch {
+      // Ignore EPERM on Windows if the file is already held open.
+    }
+  }
 }
 
 const PORT = 3100;
