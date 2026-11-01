@@ -166,6 +166,8 @@ def test_config():
     for env in ({"APP_ENV": "prod"}, {"APP_ENV": "production", "COOKIE_SECURE": "false"}, {"AI_BASE_URL": "https:///missing-host"}):
         with pytest.raises(ConfigError):
             load_settings(env)
+    vercel_cfg = load_settings({"VERCEL": "1"})
+    assert vercel_cfg.production and vercel_cfg.cookie_secure and vercel_cfg.trust_proxy and vercel_cfg.database_path == "/tmp/planner.db"
     assert load_settings({"AI_PROVIDER": "auto", "OPENAI_API_KEY": "test-key"}).ai.provider == "openai"
     assert load_settings({"AI_PROVIDER": "auto", "HF_TOKEN": "t", "HF_MODEL_ID": "m"}).ai.enabled
 

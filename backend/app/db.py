@@ -459,19 +459,27 @@ class PostgresDatabase:
                 "psycopg is required when DATABASE_URL points to PostgreSQL. Install with: pip install 'psycopg[binary]'"
             ) from err
         self._psycopg = psycopg
-        normalized_dsn = _normalize_pg_dsn(dsn)
-        try:
-            self._conn = psycopg.connect(normalized_dsn, autocommit=True, connect_timeout=10)
-        except psycopg.OperationalError:
-            fallback_dsn = _normalize_pg_dsn(dsn, decode_percent=True)
-            if fallback_dsn == normalized_dsn:
-                raise
-            self._conn = psycopg.connect(fallback_dsn, autocommit=True, connect_timeout=10)
+        self._dsn = dsn
+        self._conn = self._connect()
         try:
             self._migrate()
         except BaseException:
             self._conn.close()
             raise
+
+    def _connect(self):
+        normalized_dsn = _normalize_pg_dsn(self._dsn)
+        try:
+            return self._psycopg.connect(normalized_dsn, autocommit=True, connect_timeout=10)
+        except self._psycopg.OperationalError:
+            fallback_dsn = _normalize_pg_dsn(self._dsn, decode_percent=True)
+            if fallback_dsn == normalized_dsn:
+                raise
+            return self._psycopg.connect(fallback_dsn, autocommit=True, connect_timeout=10)
+
+    def _ensure_open(self) -> None:
+        if getattr(self._conn, "closed", False) or getattr(self._conn, "broken", False):
+            self._conn = self._connect()
 
     def _migrate(self) -> None:
         with self._conn.transaction(), self._conn.cursor() as cur:
@@ -483,29 +491,42 @@ class PostgresDatabase:
         stripped = sql.strip().upper()
         if stripped.startswith("PRAGMA "):
             return PgCursorAdapter([], 0)
+        self._ensure_open()
         pg_sql, needs_returning = _translate_sql_for_postgres(sql)
-        try:
-            with self._conn.cursor() as cur:
-                cur.execute(pg_sql, tuple(params))
-                lastrowid = None
-                rows: list[PgRow] = []
-                if cur.description is not None:
-                    cols = [col.name for col in cur.description]
-                    raw_rows = cur.fetchall()
-                    rows = [PgRow(cols, r) for r in raw_rows]
-                    if needs_returning and rows:
-                        lastrowid = int(rows[0]["id"])
-                        rows = []
-                return PgCursorAdapter(rows, cur.rowcount, lastrowid)
-        except self._psycopg.IntegrityError as err:
-            # Map PostgreSQL unique violation (SQLSTATE 23505) to sqlite3.IntegrityError so services catch it uniformly
-            if getattr(err, "sqlstate", "") == "23505":
-                raise sqlite3.IntegrityError(f"UNIQUE constraint failed: {err}") from err
-            raise sqlite3.IntegrityError(str(err)) from err
-        except self._psycopg.Error as err:
-            raise sqlite3.Error(str(err)) from err
+        for attempt in range(2):
+            try:
+                with self._conn.cursor() as cur:
+                    cur.execute(pg_sql, tuple(params))
+                    lastrowid = None
+                    rows: list[PgRow] = []
+                    if cur.description is not None:
+                        cols = [col.name for col in cur.description]
+                        raw_rows = cur.fetchall()
+                        rows = [PgRow(cols, r) for r in raw_rows]
+                        if needs_returning and rows:
+                            lastrowid = int(rows[0]["id"])
+                            rows = []
+                    return PgCursorAdapter(rows, cur.rowcount, lastrowid)
+            except self._psycopg.OperationalError as err:
+                if attempt == 0 and (
+                    getattr(self._conn, "closed", False)
+                    or getattr(self._conn, "broken", False)
+                    or not getattr(self._conn.info, "transaction_status", 0)
+                ):
+                    self._conn = self._connect()
+                    continue
+                raise sqlite3.Error(str(err)) from err
+            except self._psycopg.IntegrityError as err:
+                # Map PostgreSQL unique violation (SQLSTATE 23505) to sqlite3.IntegrityError so services catch it uniformly
+                if getattr(err, "sqlstate", "") == "23505":
+                    raise sqlite3.IntegrityError(f"UNIQUE constraint failed: {err}") from err
+                raise sqlite3.IntegrityError(str(err)) from err
+            except self._psycopg.Error as err:
+                raise sqlite3.Error(str(err)) from err
+        return PgCursorAdapter([], 0)
 
     def executemany(self, sql: str, seq_of_params: Sequence[Sequence[Any]]) -> None:
+        self._ensure_open()
         pg_sql, _ = _translate_sql_for_postgres(sql)
         with self._conn.cursor() as cur:
             cur.executemany(pg_sql, [tuple(p) for p in seq_of_params])

@@ -97,7 +97,8 @@ DEFAULT_ENDPOINTS = {
 
 def load_settings(env: Mapping[str, str] | None = None) -> Settings:
     env = os.environ if env is None else env
-    environment = env.get("APP_ENV", "development").strip().lower()
+    default_env = "production" if env.get("VERCEL") == "1" else "development"
+    environment = env.get("APP_ENV", default_env).strip().lower()
     if environment not in {"development", "test", "production"}:
         raise ConfigError("Invalid APP_ENV: expected development, test, or production")
     production = environment == "production"
@@ -176,11 +177,12 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
         daily_limit=_int(env, "AI_DAILY_LIMIT", 20, 1, 1000),
         max_repairs=_int(env, "AI_MAX_REPAIRS", 2, 0, 3),
     )
-    database_path = env.get("DATABASE_PATH", "./data/planner.db").strip()
+    default_db_path = "/tmp/planner.db" if env.get("VERCEL") == "1" else "./data/planner.db"
+    database_path = env.get("DATABASE_PATH", default_db_path).strip()
     database_url = (env.get("DATABASE_URL") or "").strip()
     if not database_url and database_path.startswith(("postgresql://", "postgres://", "sqlite://")):
         database_url = database_path
-        database_path = "./data/planner.db"
+        database_path = default_db_path
     if database_url and not database_url.startswith(("postgresql://", "postgres://", "sqlite://")):
         raise ConfigError("DATABASE_URL must start with postgresql://, postgres://, or sqlite://")
 
@@ -192,7 +194,7 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
         database_url=database_url,
         cookie_secure=cookie_secure,
         hsts=production,
-        trust_proxy=_bool(env, "TRUST_PROXY", False),
+        trust_proxy=_bool(env, "TRUST_PROXY", env.get("VERCEL") == "1"),
         session_ttl_seconds=_int(env, "SESSION_TTL_HOURS", 168, 1, 24 * 90) * 3600,
         security_log_key=security_log_key,
         ai=ai,
