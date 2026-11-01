@@ -422,6 +422,24 @@ def _normalize_pg_dsn(dsn: str, *, decode_percent: bool = False) -> str:
     return urlunsplit(parsed._replace(query=urlencode(query, quote_via=quote)))
 
 
+def _supabase_pooler_dsn(dsn: str, region: str = "eu-west-1") -> str | None:
+    """Converts a direct IPv6 db.<ref>.supabase.co DSN to its IPv4 Session Pooler DSN."""
+    parsed = urlsplit(_normalize_pg_dsn(dsn))
+    host = (parsed.hostname or "").lower()
+    parts = host.split(".")
+    if len(parts) != 4 or parts[0] != "db" or parts[2] != "supabase" or parts[3] != "co":
+        return None
+    project_ref = parts[1]
+    user = unquote(parsed.username or "postgres")
+    if "." not in user:
+        user = f"{user}.{project_ref}"
+    pw = quote(unquote(parsed.password or ""), safe="")
+    user_enc = quote(user, safe=".")
+    port = parsed.port or 5432
+    pooler_prefix = region if region.startswith("aws-") else f"aws-0-{region}"
+    return urlunsplit(parsed._replace(netloc=f"{user_enc}:{pw}@{pooler_prefix}.pooler.supabase.com:{port}"))
+
+
 class PgCursorAdapter:
     def __init__(self, rows: list[PgRow], rowcount: int, lastrowid: int | None = None) -> None:
         self._rows = rows
@@ -471,11 +489,23 @@ class PostgresDatabase:
         normalized_dsn = _normalize_pg_dsn(self._dsn)
         try:
             return self._psycopg.connect(normalized_dsn, autocommit=True, connect_timeout=10)
-        except self._psycopg.OperationalError:
+        except self._psycopg.OperationalError as first_err:
             fallback_dsn = _normalize_pg_dsn(self._dsn, decode_percent=True)
-            if fallback_dsn == normalized_dsn:
-                raise
-            return self._psycopg.connect(fallback_dsn, autocommit=True, connect_timeout=10)
+            if fallback_dsn != normalized_dsn:
+                try:
+                    conn = self._psycopg.connect(fallback_dsn, autocommit=True, connect_timeout=10)
+                    self._dsn = fallback_dsn
+                    return conn
+                except self._psycopg.OperationalError:
+                    pass
+            msg = str(first_err).lower()
+            if "cannot assign requested address" in msg or "network is unreachable" in msg or "no route to host" in msg:
+                pooler_dsn = _supabase_pooler_dsn(self._dsn)
+                if pooler_dsn:
+                    conn = self._psycopg.connect(pooler_dsn, autocommit=True, connect_timeout=10)
+                    self._dsn = pooler_dsn
+                    return conn
+            raise
 
     def _ensure_open(self) -> None:
         if getattr(self._conn, "closed", False) or getattr(self._conn, "broken", False):

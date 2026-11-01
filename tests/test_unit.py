@@ -30,6 +30,10 @@ def test_postgres_dsn_defaults_remote_connections_to_tls():
     assert parse_qs(urlsplit(_normalize_pg_dsn(verified)).query)["sslmode"] == ["verify-full"]
     raw_percent_at = "postgresql://postgres:ab%40cd@ef@remote.example:5432/postgres"
     assert "postgres:ab%2540cd%40ef@remote.example:5432" in _normalize_pg_dsn(raw_percent_at)
+    from app.db import _supabase_pooler_dsn
+
+    pooler = _supabase_pooler_dsn("postgresql://postgres:secret@db.rjofxzzxcpnkomsgyywq.supabase.co:5432/postgres")
+    assert pooler == "postgresql://postgres.rjofxzzxcpnkomsgyywq:secret@aws-0-eu-west-1.pooler.supabase.com:5432/postgres?sslmode=require"
 
 def test_postgres_cursor_iteration_consumes_remaining_rows():
     from app.db import PgCursorAdapter, PgRow
