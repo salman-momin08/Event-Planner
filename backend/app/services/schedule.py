@@ -122,7 +122,7 @@ def generate_default_schedule(ctx: Context, event: sqlite3.Row) -> dict:
     with transaction(ctx.db):
         existing_rows = ctx.db.execute("SELECT title FROM schedule_items WHERE event_id = ?", (event_id,)).fetchall()
         existing_titles = {r["title"].lower() for r in existing_rows}
-        count = len(existing_titles)
+        count = len(existing_rows)
         created = skipped = 0
         for start_time, duration, title, zone, owner, notes in template:
             if title.lower() in existing_titles:

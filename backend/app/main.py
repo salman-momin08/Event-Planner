@@ -102,9 +102,11 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         except ApiError as err:
             response = _error_response(err, request_id)
         except Exception as err:  # unexpected: details go to the log only
-            ctx.logger.error("unhandled", requestId=request_id, error=type(err).__name__, detail=str(err)[:500])
+            ctx.logger.error("unhandled", requestId=request_id, error=type(err).__name__)
             response = _error_response(ApiError(500, "internal_error", "Something went wrong"), request_id)
         response.headers["X-Request-Id"] = request_id
+        if request.url.path.startswith("/api/"):
+            response.headers["Cache-Control"] = "no-store"
         for name, value in ctx.extras["headers"].items():
             response.headers[name] = value
         route = request.scope.get("route")
@@ -209,9 +211,11 @@ def create_app(
         for warning in settings.warnings:
             logger.warn("config", warning=warning)
         logger.info("starting", environment=settings.environment, aiEnabled=ai.available)
-        yield
-        if owns_db:
-            db.close()
+        try:
+            yield
+        finally:
+            if owns_db:
+                db.close()
 
     app = FastAPI(title="Event Planning Assistant", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
     app.state.ctx = ctx

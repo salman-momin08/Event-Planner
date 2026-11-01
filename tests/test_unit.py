@@ -18,6 +18,45 @@ from pydantic import ValidationError
 from tests.conftest import valid_plan
 
 
+def test_postgres_dsn_defaults_remote_connections_to_tls():
+    from urllib.parse import parse_qs, urlsplit
+    from app.db import _normalize_pg_dsn
+
+    for dsn in ("postgresql://u:p@remote.example/db?application_name=planner", "postgresql://remote.example/db", "postgresql://u:p@localhost.evil.example/db"):
+        assert parse_qs(urlsplit(_normalize_pg_dsn(dsn)).query)["sslmode"] == ["require"]
+    local = "postgresql://u:p@[::1]/db"
+    assert _normalize_pg_dsn(local) == local
+    verified = "postgresql://u:p@remote.example/db?sslmode=verify-full"
+    assert parse_qs(urlsplit(_normalize_pg_dsn(verified)).query)["sslmode"] == ["verify-full"]
+    raw_percent_at = "postgresql://postgres:ab%40cd@ef@remote.example:5432/postgres"
+    assert "postgres:ab%2540cd%40ef@remote.example:5432" in _normalize_pg_dsn(raw_percent_at)
+
+def test_postgres_cursor_iteration_consumes_remaining_rows():
+    from app.db import PgCursorAdapter, PgRow
+
+    rows = [PgRow(["id"], [1]), PgRow(["id"], [2])]
+    cursor = PgCursorAdapter(rows, 2)
+    assert cursor.fetchone()["id"] == 1
+    assert [row["id"] for row in cursor] == [2]
+    assert cursor.fetchall() == []
+
+
+def test_invitation_migration_preserves_saved_data():
+    import sqlite3
+    from app.db import SCHEMA_V1, SCHEMA_V2, _migrate
+
+    database = sqlite3.connect(":memory:", isolation_level=None)
+    try:
+        database.executescript(SCHEMA_V1 + SCHEMA_V2)
+        database.execute("PRAGMA user_version = 2")
+        database.execute("INSERT INTO invitations (event_id, headline, updated_at) VALUES (1, 'Keep me', '2026-11-01')")
+        _migrate(database)
+        assert database.execute("SELECT headline FROM invitations").fetchone()[0] == "Keep me"
+        assert database.execute("PRAGMA user_version").fetchone()[0] == 3
+    finally:
+        database.close()
+
+
 def test_001_scrypt_hashing():
     a = hash_password_sync("correct horse battery")
     b = hash_password_sync("correct horse battery")
@@ -124,6 +163,11 @@ def test_config():
         load_settings({"AI_PROVIDER": "unknown"})
     with pytest.raises(ConfigError):
         load_settings({"AI_MAX_REPAIRS": "9"})
+    for env in ({"APP_ENV": "prod"}, {"APP_ENV": "production", "COOKIE_SECURE": "false"}, {"AI_BASE_URL": "https:///missing-host"}):
+        with pytest.raises(ConfigError):
+            load_settings(env)
+    assert load_settings({"AI_PROVIDER": "auto", "OPENAI_API_KEY": "test-key"}).ai.provider == "openai"
+    assert load_settings({"AI_PROVIDER": "auto", "HF_TOKEN": "t", "HF_MODEL_ID": "m"}).ai.enabled
 
 
 def test_040_valid_ai_plan_normalised():
@@ -148,6 +192,9 @@ def test_041_invalid_and_adversarial_plans():
     _bad(lambda p: p["tasks"][0].update(daysBeforeEvent=1.5))
     _bad(lambda p: p["tasks"][0].update(daysBeforeEvent=1000))
     _bad(lambda p: p["tasks"][0].update(daysBeforeEvent="soon"))
+    for value in (float("inf"), float("nan"), 10 ** 400):
+        _bad(lambda p: p["tasks"][0].update(daysBeforeEvent=value))
+        _bad(lambda p: p["budgetAllocations"][0].update(percent=value))
     _bad(lambda p: p["tasks"][1].update(title=p["tasks"][0]["title"].upper()))
     _bad(lambda p: p["budgetAllocations"][0].update(percent=-5))
     _bad(lambda p: p["budgetAllocations"][0].update(percent="40"))

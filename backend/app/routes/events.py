@@ -77,5 +77,5 @@ async def export(
         )
     raise ApiError(
         400, "validation_error", "Invalid export options",
-        {"format": "Use format=json, or format=csv with section=tasks|expenses|vendors"},
+        {"format": "Use format=json, or format=csv with section=tasks|expenses|vendors|schedule"},
     )

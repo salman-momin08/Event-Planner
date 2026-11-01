@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import sqlite3
 
@@ -63,26 +64,7 @@ def _default_invitation(event: sqlite3.Row) -> dict:
     }
 
 
-def _ensure_invitations_table(ctx: Context) -> None:
-    ctx.db.execute(
-        """CREATE TABLE IF NOT EXISTS invitations (
-             event_id INTEGER PRIMARY KEY REFERENCES events(id) ON DELETE CASCADE,
-             headline TEXT NOT NULL DEFAULT '',
-             subheadline TEXT NOT NULL DEFAULT '',
-             host_line TEXT NOT NULL DEFAULT '',
-             body_text TEXT NOT NULL DEFAULT '',
-             rsvp_contact TEXT NOT NULL DEFAULT '',
-             rsvp_deadline TEXT NOT NULL DEFAULT '',
-             dress_code TEXT NOT NULL DEFAULT '',
-             theme_style TEXT NOT NULL DEFAULT 'royal_indigo',
-             layout_style TEXT NOT NULL DEFAULT 'classic_crest',
-             updated_at TEXT NOT NULL
-           )"""
-    )
-
-
 def get_invitation(ctx: Context, event: sqlite3.Row) -> dict:
-    _ensure_invitations_table(ctx)
     row = ctx.db.execute("SELECT * FROM invitations WHERE event_id = ?", (event["id"],)).fetchone()
     if row is None:
         return _default_invitation(event)
@@ -100,7 +82,6 @@ def get_invitation(ctx: Context, event: sqlite3.Row) -> dict:
 
 
 def save_invitation(ctx: Context, event: sqlite3.Row, body: InvitationUpdateIn) -> dict:
-    _ensure_invitations_table(ctx)
     ts = ctx.clock().isoformat()
     theme_style = body.themeStyle if body.themeStyle else "royal_indigo"
     layout_style = body.layoutStyle if body.layoutStyle else "classic_crest"
@@ -110,8 +91,6 @@ def save_invitation(ctx: Context, event: sqlite3.Row, body: InvitationUpdateIn) 
         body.subheadline,
         body.hostLine,
         body.bodyText,
-        body.rsvpContact,
-        body.rsvpDeadline,
         body.dressCode,
         theme_style,
         layout_style,
@@ -119,25 +98,18 @@ def save_invitation(ctx: Context, event: sqlite3.Row, body: InvitationUpdateIn) 
     )
     sql = """INSERT INTO invitations (
                  event_id, headline, subheadline, host_line, body_text,
-                 rsvp_contact, rsvp_deadline, dress_code, theme_style, layout_style, updated_at
-               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 dress_code, theme_style, layout_style, updated_at
+               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT(event_id) DO UPDATE SET
                  headline = excluded.headline,
                  subheadline = excluded.subheadline,
                  host_line = excluded.host_line,
                  body_text = excluded.body_text,
-                 rsvp_contact = excluded.rsvp_contact,
-                 rsvp_deadline = excluded.rsvp_deadline,
                  dress_code = excluded.dress_code,
                  theme_style = excluded.theme_style,
                  layout_style = excluded.layout_style,
                  updated_at = excluded.updated_at"""
-    try:
-        ctx.db.execute(sql, params)
-    except sqlite3.Error:
-        ctx.db.execute("DROP TABLE IF EXISTS invitations")
-        _ensure_invitations_table(ctx)
-        ctx.db.execute(sql, params)
+    ctx.db.execute(sql, params)
     return get_invitation(ctx, event)
 
 
@@ -214,12 +186,17 @@ async def draft_invitation_copy(ctx: Context, user: dict, event: sqlite3.Row, bo
     messages = [SystemMessage(content=INVITATION_SYSTEM_PROMPT), HumanMessage(content=payload)]
     parser = JsonOutputParser()
     try:
-        reply = await ctx.ai.model.ainvoke(messages) if getattr(ctx.ai, "model", None) is not None else None
+        reply = await asyncio.wait_for(ctx.ai.model.ainvoke(messages), timeout=ctx.settings.ai.timeout_s) if getattr(ctx.ai, "model", None) is not None else None
         if reply is None:
             raise ApiError(503, "ai_unavailable", "The AI assistant is currently unavailable.")
-        parsed = _parse_json(parser, _text_of(reply))
+        text = _text_of(reply)
+        if len(text) > 32_768:
+            raise ValueError("response too large")
+        parsed = _parse_json(parser, text)
         if not isinstance(parsed, dict):
             raise ValueError("not an object")
+    except asyncio.TimeoutError:
+        raise ApiError(504, "ai_timeout", "The AI assistant took too long to respond. Your invitation is unchanged.") from None
     except ApiError:
         raise
     except Exception:

@@ -233,8 +233,6 @@ class InvitationUpdateIn(StrictModel):
     subheadline: Text(160) = ""
     hostLine: Text(120) = ""
     bodyText: Text(600, multiline=True) = ""
-    rsvpContact: Text(120) = ""
-    rsvpDeadline: Text(40) = ""
     dressCode: Text(80) = ""
     themeStyle: Text(40) = "royal_indigo"
     layoutStyle: Text(40) = "classic_crest"

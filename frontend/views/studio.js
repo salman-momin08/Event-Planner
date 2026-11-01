@@ -1,4 +1,4 @@
-import { del, get, patch, post, put } from '../api.js';
+import { del, get, patch, post } from '../api.js';
 import { EVENT_TYPE, announce, button, confirmAction, emptyState, formatDate, formView, h, showBanner } from '../dom.js';
 
 const SPACE_PRESETS = [
@@ -270,25 +270,9 @@ async function verifyFileMagicBytes(file) {
   // JPEG: FF D8 FF
   const isJpeg = b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff;
   // PNG: 89 50 4E 47 0D 0A 1A 0A
-  const isPng =
-    b[0] === 0x89 &&
-    b[1] === 0x50 &&
-    b[2] === 0x4e &&
-    b[3] === 0x47 &&
-    b[4] === 0x0d &&
-    b[5] === 0x0a &&
-    b[6] === 0x1a &&
-    b[7] === 0x0a;
+  const isPng = b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47 && b[4] === 0x0d && b[5] === 0x0a && b[6] === 0x1a && b[7] === 0x0a;
   // WebP: RIFF....WEBP
-  const isWebp =
-    b[0] === 0x52 &&
-    b[1] === 0x49 &&
-    b[2] === 0x46 &&
-    b[3] === 0x46 &&
-    b[8] === 0x57 &&
-    b[9] === 0x45 &&
-    b[10] === 0x42 &&
-    b[11] === 0x50;
+  const isWebp = b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 && b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50;
   return isJpeg || isPng || isWebp;
 }
 
@@ -507,12 +491,7 @@ export async function decorSection(ev, { refresh }) {
     { id: 'decor-space-type' },
     SPACE_PRESETS.map(([key, title, desc]) => h('option', { value: key }, `${title} — ${desc}`)),
   );
-  const spaceSelectWrap = h(
-    'div',
-    { class: 'field-control select-wrap has-value' },
-    spaceSelect,
-    h('label', { for: 'decor-space-type' }, 'Venue space type'),
-  );
+  const spaceSelectWrap = h('div', { class: 'field-control select-wrap has-value' }, spaceSelect, h('label', { for: 'decor-space-type' }, 'Venue space type'));
   spaceSelect.addEventListener('mousedown', () => {
     if (document.activeElement === spaceSelect) spaceSelectWrap.classList.toggle('is-open');
     else spaceSelectWrap.classList.add('is-open');
@@ -598,12 +577,7 @@ export async function decorSection(ev, { refresh }) {
     { id: 'decor-lighting' },
     LIGHTING_MOODS.map(([val, text]) => h('option', { value: val }, text)),
   );
-  const lightingSelectWrap = h(
-    'div',
-    { class: 'field-control select-wrap has-value' },
-    lightingSelect,
-    h('label', { for: 'decor-lighting' }, 'Lighting mood'),
-  );
+  const lightingSelectWrap = h('div', { class: 'field-control select-wrap has-value' }, lightingSelect, h('label', { for: 'decor-lighting' }, 'Lighting mood'));
   lightingSelect.addEventListener('mousedown', () => {
     if (document.activeElement === lightingSelect) lightingSelectWrap.classList.toggle('is-open');
     else lightingSelectWrap.classList.add('is-open');
@@ -657,7 +631,11 @@ export async function decorSection(ev, { refresh }) {
         'div',
         { class: 'field' },
         spaceSelectWrap,
-        h('p', { class: 'hint' }, 'Select the setting that matches your venue so the AI understands structural boundaries, weather exposure, and rigging options.'),
+        h(
+          'p',
+          { class: 'hint' },
+          'Select the setting that matches your venue so the AI understands structural boundaries, weather exposure, and rigging options.',
+        ),
       ),
       customFieldWrap,
     ),
@@ -665,12 +643,7 @@ export async function decorSection(ev, { refresh }) {
     h(
       'div',
       { class: 'upload-zone' },
-      h(
-        'div',
-        { class: 'upload-zone-bar' },
-        h('label', { for: 'decor-photo-input', class: 'btn secondary' }, 'Choose venue / room photo'),
-        clearImgBtn,
-      ),
+      h('div', { class: 'upload-zone-bar' }, h('label', { for: 'decor-photo-input', class: 'btn secondary' }, 'Choose venue / room photo'), clearImgBtn),
       fileInput,
       uploadStatus,
       previewImg,
@@ -1063,7 +1036,7 @@ function renderLiveInvitationCard(ev, inv, onEditField) {
   const theme = INVITATION_THEMES[inv.themeStyle] ?? INVITATION_THEMES.royal_indigo;
   const styleVars = `--inv-bg:${theme.bg};--inv-inner:${theme.innerBg};--inv-border:${theme.border};--inv-accent:${theme.accent};--inv-text:${theme.text};--inv-muted:${theme.muted}`;
   const editableProps = (fieldName, labelText) => ({
-    contenteditable: 'true',
+    contenteditable: 'plaintext-only',
     spellcheck: 'false',
     role: 'textbox',
     'aria-label': `Edit ${labelText} directly on card`,
@@ -1103,13 +1076,11 @@ function renderLiveInvitationCard(ev, inv, onEditField) {
   );
 }
 
-export async function invitationSection(ev, { refresh }) {
+export async function invitationSection(ev) {
   const [aiStatus, inv] = await Promise.all([get('/ai/status'), get(`/events/${ev.id}/invitation`)]);
   const base = `/events/${ev.id}/invitation`;
 
-  let designForm;
   const syncCardInlineEditToForm = (fieldName, rawText) => {
-    if (!designForm) return;
     const cleanVal = fieldName === 'dressCode' ? rawText.replace(/^Dress code:\s*/i, '').trim() : rawText;
     const el = designForm.querySelector(`[name="${fieldName}"]`);
     if (el) {
@@ -1157,7 +1128,7 @@ export async function invitationSection(ev, { refresh }) {
 
   const saveBanner = h('p', { class: 'alert', role: 'status', hidden: true });
 
-  designForm = formView({
+  const designForm = formView({
     fields,
     initial: { ...currentState, occasionPreset: initialPresetIdx >= 0 ? String(initialPresetIdx) : 'custom' },
     submitLabel: 'Save invitation card',
@@ -1263,11 +1234,7 @@ export async function invitationSection(ev, { refresh }) {
       'label',
       { class: 'checkbox-item', for: 'inv-ai-include-theme' },
       includeThemeToggle,
-      h(
-        'span',
-        null,
-        'Include selected theme & current card content (uncheck to let AI generate a fresh theme and wording from scratch)',
-      ),
+      h('span', null, 'Include selected theme & current card content (uncheck to let AI generate a fresh theme and wording from scratch)'),
     );
 
     const aiForm = formView({

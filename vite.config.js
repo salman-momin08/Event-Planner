@@ -7,13 +7,13 @@ export default defineConfig({
   root: 'frontend',
   server: {
     port: 5173,
-    strictPort: true,
+    strictPort: false,
     headers: {
       'Cache-Control': 'no-store',
     },
     proxy: {
       // changeOrigin:false keeps the Host header as the dev-server host so backend's Origin==Host check passes.
-      '/api': { target: 'http://127.0.0.1:3000', changeOrigin: false },
+      '/api/': { target: 'http://127.0.0.1:3000', changeOrigin: false },
       '/healthz': { target: 'http://127.0.0.1:3000', changeOrigin: false },
     },
   },

@@ -64,6 +64,33 @@ def test_011_budget_summary_after_edits(setup):
     assert c.get(f"{base}/summary").json["budget"]["overBudget"] is True
 
 
+def test_event_deletion_with_expenses(setup):
+    app, c, ev, base = setup()
+    category = c.post(f"{base}/budget-categories", {"name": "Food"}).json
+    assert c.post(f"{base}/expenses", {"categoryId": category["id"], "description": "Deposit", "amountCents": 50, "spentOn": "2026-11-01"}).status == 201
+    assert c.delete(base).status == 204
+    assert app.db.execute("SELECT COUNT(*) FROM expenses").fetchone()[0] == 0
+
+
+@pytest.mark.parametrize("target", [0, 30])
+def test_category_spent_reduction_preserves_expense_history(setup, target):
+    app, c, ev, base = setup()
+    category = c.post(f"{base}/budget-categories", {"name": "Food"}).json
+    expense = c.post(f"{base}/expenses", {"categoryId": category["id"], "description": "Vendor deposit", "amountCents": 50, "spentOn": "2026-11-01"}).json
+    result = c.patch(f"{base}/budget-categories/{category['id']}", {"name": "Changed", "spentCents": target})
+    assert result.status == 400 and "spentCents" in result.json["error"]["details"]
+    assert c.get(f"{base}/expenses").json == [expense]
+    assert c.get(f"{base}/budget-categories").json == [category]
+
+
+def test_schedule_template_limit_counts_duplicate_titles(setup):
+    app, c, ev, base = setup()
+    for _ in range(120):
+        assert c.post(f"{base}/schedule", {"startTime": "12:00", "durationMinutes": 30, "title": "Repeated"}).status == 201
+    assert c.post(f"{base}/schedule/generate-template").status == 409
+    assert len(c.get(f"{base}/schedule").json) == 120
+
+
 def test_012_category_in_use_and_duplicates(setup):
     app, c, ev, base = setup()
     cat = c.post(f"{base}/budget-categories", {"name": "Food", "plannedCents": 100}).json

@@ -77,7 +77,7 @@ async def create_draft(ctx: Context, user: dict, event: sqlite3.Row, body: PlanR
     previous_plan = json.loads(_row(ctx, event["id"], body.parentId)["plan_json"]) if body.parentId else None
     n = ctx.db.execute("SELECT COUNT(*) AS n FROM ai_plan_versions WHERE event_id = ?", (event["id"],)).fetchone()["n"]
     if n >= MAX_PLANS_PER_EVENT:
-        raise limit_reached(f"An event can keep at most {MAX_PLANS_PER_EVENT} AI drafts; discard some first")
+        raise limit_reached(f"An event can store at most {MAX_PLANS_PER_EVENT} AI plans, including discarded drafts")
 
     try:
         enforce(ctx.limiters["ai_minute"], f"ai:{user['id']}", "AI requests are limited to a few per minute")

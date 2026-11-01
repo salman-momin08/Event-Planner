@@ -1165,7 +1165,12 @@ details[open] > summary::after {
   border-width: 1px;
   border-radius: 0;
   text-align: left;
-  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-family:
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
 }
 .invitation-card-preview.layout-modern_editorial .inv-divider {
   margin: var(--space-3) 0;

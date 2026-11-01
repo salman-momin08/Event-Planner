@@ -6,7 +6,7 @@ from ..context import Context
 from ..dates import add_days, to_date_string
 from ..db import transaction
 from ..errors import limit_reached
-from .tasks import LIMITS, list_tasks
+from .tasks import LIMITS
 
 # (title, category, days before the event, prerequisite title or None)
 WEDDING = [

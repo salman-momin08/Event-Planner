@@ -1,0 +1,38 @@
+services:
+  app:
+    build: .
+    image: event-planner:local
+    restart: unless-stopped
+    init: true
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      APP_ENV: production
+      COOKIE_SECURE: "true"
+      TRUST_PROXY: "false"
+      DATABASE_URL: ${DATABASE_URL:-}
+      SECURITY_LOG_KEY: ${SECURITY_LOG_KEY:?Set a persistent random SECURITY_LOG_KEY}
+      AI_PROVIDER: ${AI_PROVIDER:-auto}
+      AI_MODEL: ${AI_MODEL:-}
+      AI_BASE_URL: ${AI_BASE_URL:-}
+      AI_API_KEY: ${AI_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      HF_TOKEN: ${HF_TOKEN:-}
+      HF_MODEL_ID: ${HF_MODEL_ID:-}
+      HF_ENDPOINT_URL: ${HF_ENDPOINT_URL:-}
+    volumes:
+      - planner-data:/app/backend/data
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  planner-data:

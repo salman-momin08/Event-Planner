@@ -21,7 +21,8 @@ def test_073_frontend_has_no_xss_sinks_inline_handlers_or_external_resources():
         text = f.read_text(encoding="utf-8")
         for pattern in forbidden:
             assert not re.search(pattern, text, re.I), f"{f.name} matches {pattern}"
-        assert not re.search(r"https?://", text, re.I), f"{f.name} references an external URL"
+        resource_text = text.replace("http://www.w3.org/2000/svg", "")
+        assert not re.search(r"https?://", resource_text, re.I), f"{f.name} references an external URL"
     html = (PUBLIC / "index.html").read_text(encoding="utf-8")
     assert not re.search(r"\son[a-z]+\s*=", html, re.I)
     assert not re.search(r"\sstyle\s*=", html, re.I)

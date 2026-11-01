@@ -13,6 +13,7 @@ from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qsl, quote, unquote, urlencode, urlsplit, urlunsplit
 
 SCHEMA_V1 = """
 CREATE TABLE users (
@@ -166,8 +167,6 @@ CREATE TABLE invitations (
   subheadline TEXT NOT NULL DEFAULT '',
   host_line TEXT NOT NULL DEFAULT '',
   body_text TEXT NOT NULL DEFAULT '',
-  rsvp_contact TEXT NOT NULL DEFAULT '',
-  rsvp_deadline TEXT NOT NULL DEFAULT '',
   dress_code TEXT NOT NULL DEFAULT '',
   theme_style TEXT NOT NULL DEFAULT 'royal_indigo',
   layout_style TEXT NOT NULL DEFAULT 'classic_crest',
@@ -175,22 +174,7 @@ CREATE TABLE invitations (
 );
 """
 
-SCHEMA_V3 = """
-DROP TABLE IF EXISTS invitations;
-CREATE TABLE invitations (
-  event_id INTEGER PRIMARY KEY REFERENCES events(id) ON DELETE CASCADE,
-  headline TEXT NOT NULL DEFAULT '',
-  subheadline TEXT NOT NULL DEFAULT '',
-  host_line TEXT NOT NULL DEFAULT '',
-  body_text TEXT NOT NULL DEFAULT '',
-  rsvp_contact TEXT NOT NULL DEFAULT '',
-  rsvp_deadline TEXT NOT NULL DEFAULT '',
-  dress_code TEXT NOT NULL DEFAULT '',
-  theme_style TEXT NOT NULL DEFAULT 'royal_indigo',
-  layout_style TEXT NOT NULL DEFAULT 'classic_crest',
-  updated_at TEXT NOT NULL
-);
-"""
+SCHEMA_V3 = ""
 
 MIGRATIONS = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3]
 
@@ -347,13 +331,13 @@ CREATE TABLE IF NOT EXISTS invitations (
   subheadline TEXT NOT NULL DEFAULT '',
   host_line TEXT NOT NULL DEFAULT '',
   body_text TEXT NOT NULL DEFAULT '',
-  rsvp_contact TEXT NOT NULL DEFAULT '',
-  rsvp_deadline TEXT NOT NULL DEFAULT '',
   dress_code TEXT NOT NULL DEFAULT '',
   theme_style TEXT NOT NULL DEFAULT 'royal_indigo',
   layout_style TEXT NOT NULL DEFAULT 'classic_crest',
   updated_at TEXT NOT NULL
 );
+ALTER TABLE invitations DROP COLUMN IF EXISTS rsvp_contact;
+ALTER TABLE invitations DROP COLUMN IF EXISTS rsvp_deadline;
 """
 
 _SERIAL_ID_TABLES = {
@@ -418,22 +402,24 @@ def _translate_sql_for_postgres(sql: str) -> tuple[str, bool]:
     return pg_sql, needs_returning
 
 
-def _normalize_pg_dsn(dsn: str) -> str:
-    """Safely URL-encodes passwords containing raw '@', '#', or spaces in a postgresql:// URI."""
+def _normalize_pg_dsn(dsn: str, *, decode_percent: bool = False) -> str:
+    """Safely URL-encodes passwords containing raw '@', '%', '#', or spaces in a postgresql:// URI."""
     s = dsn.strip()
-    if "://" not in s or "@" not in s:
+    if "://" not in s:
         return s
-    scheme, rest = s.split("://", 1)
-    # Split on the LAST '@' so any '@' inside the password stays in the userinfo part
-    userinfo, hostpart = rest.rsplit("@", 1)
-    if ":" in userinfo:
-        user, raw_password = userinfo.split(":", 1)
-        encoded_user = quote(unquote(user), safe="")
-        encoded_pw = quote(unquote(raw_password), safe="")
-        userinfo = f"{encoded_user}:{encoded_pw}"
-    if "?" not in hostpart and "localhost" not in hostpart and "127.0.0.1" not in hostpart:
-        hostpart = f"{hostpart}?sslmode=require"
-    return f"{scheme}://{userinfo}@{hostpart}"
+    if "@" in s:
+        scheme, rest = s.split("://", 1)
+        userinfo, hostpart = rest.rsplit("@", 1)
+        if ":" in userinfo:
+            user, raw_password = userinfo.split(":", 1)
+            pw = unquote(raw_password) if decode_percent else raw_password
+            userinfo = f"{quote(unquote(user), safe='')}:{quote(pw, safe='')}"
+        s = f"{scheme}://{userinfo}@{hostpart}"
+    parsed = urlsplit(s)
+    query = parse_qsl(parsed.query, keep_blank_values=True)
+    if parsed.hostname not in {"localhost", "127.0.0.1", "::1"} and not any(key == "sslmode" for key, _ in query):
+        query.append(("sslmode", "require"))
+    return urlunsplit(parsed._replace(query=urlencode(query)))
 
 
 class PgCursorAdapter:
@@ -455,8 +441,10 @@ class PgCursorAdapter:
         self._idx = len(self._rows)
         return rows
 
+    def __iter__(self) -> Iterator[PgRow]:
+        while (row := self.fetchone()) is not None:
+            yield row
 
-from urllib.parse import quote, unquote
 
 class PostgresDatabase:
     """PostgreSQL connection wrapper matching the synchronous interface used across all services."""
@@ -472,18 +460,28 @@ class PostgresDatabase:
             ) from err
         self._psycopg = psycopg
         normalized_dsn = _normalize_pg_dsn(dsn)
-        self._conn = psycopg.connect(normalized_dsn, autocommit=True)
-        self._migrate()
+        try:
+            self._conn = psycopg.connect(normalized_dsn, autocommit=True, connect_timeout=10)
+        except psycopg.OperationalError:
+            fallback_dsn = _normalize_pg_dsn(dsn, decode_percent=True)
+            if fallback_dsn == normalized_dsn:
+                raise
+            self._conn = psycopg.connect(fallback_dsn, autocommit=True, connect_timeout=10)
+        try:
+            self._migrate()
+        except BaseException:
+            self._conn.close()
+            raise
 
     def _migrate(self) -> None:
-        with self._conn.cursor() as cur:
+        with self._conn.transaction(), self._conn.cursor() as cur:
             for stmt in PG_SCHEMA.split(";\n"):
                 if stmt.strip():
                     cur.execute(stmt)
 
     def execute(self, sql: str, params: Sequence[Any] = ()) -> PgCursorAdapter:
         stripped = sql.strip().upper()
-        if stripped.startswith(("PRAGMA ", "DROP TABLE IF EXISTS INVITATIONS", "CREATE TABLE IF NOT EXISTS INVITATIONS")):
+        if stripped.startswith("PRAGMA "):
             return PgCursorAdapter([], 0)
         pg_sql, needs_returning = _translate_sql_for_postgres(sql)
         try:
@@ -504,6 +502,8 @@ class PostgresDatabase:
             if getattr(err, "sqlstate", "") == "23505":
                 raise sqlite3.IntegrityError(f"UNIQUE constraint failed: {err}") from err
             raise sqlite3.IntegrityError(str(err)) from err
+        except self._psycopg.Error as err:
+            raise sqlite3.Error(str(err)) from err
 
     def executemany(self, sql: str, seq_of_params: Sequence[Sequence[Any]]) -> None:
         pg_sql, _ = _translate_sql_for_postgres(sql)

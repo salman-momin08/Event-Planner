@@ -90,14 +90,15 @@ def test_063_account_deletion_cascades(make_app):
     c = app.sign_up("del")
     ev = app.make_event(c)
     base = f"/events/{ev['id']}"
-    c.post(f"{base}/budget-categories", {"name": "Food", "plannedCents": 100})
+    category = c.post(f"{base}/budget-categories", {"name": "Food", "plannedCents": 100}).json
+    assert c.post(f"{base}/expenses", {"categoryId": category["id"], "description": "Deposit", "amountCents": 50, "spentOn": "2026-11-01"}).status == 201
     c.post(f"{base}/tasks", {"title": "T"})
     c.post(f"{base}/vendors", {"name": "V"})
 
     assert c.delete("/auth/me", {"password": "not the password!"}).status == 401
     assert c.get("/auth/me").status == 200
     assert c.delete("/auth/me", {"password": PASSWORD}).status == 204
-    for table in ("users", "sessions", "events", "budget_categories", "tasks", "vendors"):
+    for table in ("users", "sessions", "events", "budget_categories", "expenses", "tasks", "vendors"):
         assert app.db.execute(f"SELECT COUNT(*) n FROM {table}").fetchone()["n"] == 0, table
     assert c.get("/auth/me").status == 401
 

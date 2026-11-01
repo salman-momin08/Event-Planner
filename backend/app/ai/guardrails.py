@@ -194,7 +194,7 @@ def _verify_image_data_url(ctx: "Context | None", user_id: int | None, data_url:
 
 
 def scrub_ai_output_text(text: str) -> str:
-    """Strips dangerous HTML/script tags, markdown links, emails, URLs, and phone numbers from LLM output."""
+    """Removes script-like tags and JavaScript URL prefixes; render the result as text only."""
     s = re.sub(r"<\s*/?\s*(?:script|iframe|object|embed|svg|img|style|link|meta)\b[^>]*>", "", text, flags=re.I)
     s = re.sub(r"javascript\s*:", "", s, flags=re.I)
     return s.strip()

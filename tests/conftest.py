@@ -115,7 +115,8 @@ class Client:
 class Harness:
     def __init__(self, stack: ExitStack, env: dict, chat_model, clock, limits) -> None:
         self.settings = load_settings({"DATABASE_PATH": ":memory:", **env})
-        self.db = open_database(":memory:")
+        self.db = open_database(":memory:", self.settings.database_url)
+        stack.callback(self.db.close)
         self.clock_value = clock
         self.app = create_app(
             self.settings,

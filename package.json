@@ -5,7 +5,7 @@
   "description": "Frontend tooling for the Event Planning Assistant (framework-free ES modules served by the FastAPI backend).",
   "type": "module",
   "engines": {
-    "node": ">=20.19"
+    "node": "^20.19.0 || ^22.13.0 || >=24"
   },
   "scripts": {
     "dev": "concurrently -k -n backend,frontend -c blue,green \"npm:dev:backend\" \"npm:dev:frontend\"",
@@ -20,18 +20,24 @@
     "test": "python -m pytest",
     "test:unit": "vitest run",
     "test:a11y": "playwright test",
-    "audit": "npm audit --omit=dev || true"
+    "audit": "npm audit",
+    "audit:backend": "python -m pip_audit -r backend/requirements.txt"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.14.0",
-    "@eslint/js": "^9.0.0",
+    "@eslint/js": "^10.0.0",
     "@playwright/test": "^1.64.1",
     "concurrently": "^9.0.0",
-    "eslint": "^9.0.0",
+    "eslint": "^10.14.0",
     "globals": "^15.0.0",
     "jsdom": "^30.1.3",
     "prettier": "^3.0.0",
     "vite": "^8.3.5",
     "vitest": "^5.0.5"
+  },
+  "overrides": {
+    "eslint": {
+      "minimatch": "^11.0.1"
+    }
   }
 }

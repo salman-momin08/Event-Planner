@@ -125,10 +125,6 @@ export async function aiSection(ev, { refresh }) {
     null,
     h('h2', null, 'AI assistant'),
     h(
-      'p',
-      null,
-    ),
-    h(
       'details',
       null,
       h('summary', null, 'What is shared with the AI provider?'),

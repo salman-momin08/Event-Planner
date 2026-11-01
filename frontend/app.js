@@ -54,7 +54,11 @@ function breadcrumbNav(items) {
       { class: 'breadcrumb-list' },
       items.map(([href, text], i) => {
         const isLast = i === items.length - 1;
-        return h('li', null, href && !isLast ? h('a', { href }, i === 0 ? ` ${text}` : text) : h('span', { 'aria-current': isLast ? 'page' : undefined }, text));
+        return h(
+          'li',
+          null,
+          href && !isLast ? h('a', { href }, i === 0 ? ` ${text}` : text) : h('span', { 'aria-current': isLast ? 'page' : undefined }, text),
+        );
       }),
     ),
   );
@@ -212,8 +216,8 @@ async function render({ keepContext = false } = {}) {
       view = await eventsListView();
     } else if (root === 'events' && a === 'new') {
       view = newEventView(ctx);
-    } else if (root === 'events' && /^\d{1,9}$/.test(a)) {
-      view = await eventView(Number(a), b ?? 'overview', ctx);
+    } else if (root === 'events' && /^\d{1,19}$/.test(a)) {
+      view = await eventView(a, b ?? 'overview', ctx);
     } else {
       view = notFoundView();
     }

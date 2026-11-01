@@ -80,7 +80,7 @@ def _endpoint(raw: str, name: str = "AI_BASE_URL") -> str:
         return ""
     url = urlparse(raw)
     local = (url.hostname or "") in LOCAL_HOSTS
-    if url.scheme == "https" or (url.scheme == "http" and local):
+    if url.hostname and not url.username and not url.password and (url.scheme == "https" or (url.scheme == "http" and local)):
         return raw.rstrip("/")
     raise ConfigError(f"{name} must use https (http is allowed only for localhost)")
 
@@ -97,13 +97,15 @@ DEFAULT_ENDPOINTS = {
 
 def load_settings(env: Mapping[str, str] | None = None) -> Settings:
     env = os.environ if env is None else env
-    environment = env.get("APP_ENV", "development")
+    environment = env.get("APP_ENV", "development").strip().lower()
+    if environment not in {"development", "test", "production"}:
+        raise ConfigError("Invalid APP_ENV: expected development, test, or production")
     production = environment == "production"
     warnings: list[str] = []
 
     cookie_secure = _bool(env, "COOKIE_SECURE", production)
     if production and not cookie_secure:
-        warnings.append("COOKIE_SECURE is false in production")
+        raise ConfigError("COOKIE_SECURE must be true in production")
 
     # Keys the HMAC that pseudonymises client IPs in the audit log; kept out of the database so a
     # DB leak cannot reverse the small IPv4 space. A random per-process key is used when unset.
@@ -115,6 +117,8 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
         security_log_key = secrets.token_bytes(32)
 
     raw_provider = (env.get("AI_PROVIDER") or "").strip().lower()
+    if raw_provider == "auto":
+        raw_provider = ""
     gemini_key = env.get("GEMINI_API_KEY") or env.get("GOOGLE_API_KEY") or ""
     openai_key = env.get("OPENAI_API_KEY") or ""
     hf_token = env.get("HF_TOKEN") or env.get("HUGGINGFACEHUB_API_TOKEN") or ""

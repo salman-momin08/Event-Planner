@@ -5,7 +5,7 @@ import sqlite3
 from fastapi import APIRouter, Depends, Response
 
 from ..context import Context
-from ..deps import get_ctx, owned_event
+from ..deps import get_ctx, owned_event, require_user
 from ..schemas import (
     CategoryIn,
     CategoryPatch,
@@ -22,7 +22,6 @@ from ..schemas import (
     VendorIn,
     VendorPatch,
 )
-from ..deps import get_ctx, owned_event, require_user
 from ..services import budget, guests, invitations, schedule, tasks, templates, vendors
 
 router = APIRouter(prefix="/events/{event_id:int}")

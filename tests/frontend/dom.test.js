@@ -74,6 +74,18 @@ describe('label', () => {
 });
 
 describe('h()', () => {
+  it('applies dynamic styles through CSSOM rather than blocked style attributes', () => {
+    const setAttribute = vi.spyOn(window.Element.prototype, 'setAttribute');
+    try {
+      const el = h('div', { style: '--accent: red; background-color: blue' });
+      expect(el.style.getPropertyValue('--accent')).toBe('red');
+      expect(el.style.backgroundColor).toBe('blue');
+      expect(setAttribute).not.toHaveBeenCalledWith('style', expect.anything());
+    } finally {
+      setAttribute.mockRestore();
+    }
+  });
+
   it('sets class, for, boolean and string attributes', () => {
     const el = h('label', { class: 'field', for: 'x', 'data-k': 'v' });
     expect(el.className).toBe('field');

@@ -62,6 +62,25 @@ test.describe('WCAG 2.2 AA — real rendered UI', () => {
       await gotoView(page, `#/${base}${section ? `/${section}` : ''}`);
       const violations = await scan(page);
       expect(violations, `violations on #/${base}/${section}: ${JSON.stringify(violations.map((v) => v.id))}`).toEqual([]);
+      if (section === 'invitation') {
+        const card = page.locator('.invitation-card-preview');
+        await expect(card).toBeVisible();
+        expect(await card.evaluate((el) => getComputedStyle(el).getPropertyValue('--inv-bg').trim())).not.toBe('');
+        const apiPath = `/api/v1/${base}/invitation`;
+        await page.getByLabel('Edit main headline directly on card').fill('Garden Gala');
+        await page.getByRole('button', { name: 'Save invitation card' }).click();
+        await expect(page.getByText('Invitation card saved.', { exact: true }).first()).toBeVisible();
+        const saved = await (await page.request.get(apiPath)).json();
+        expect(saved.headline).toBe('Garden Gala');
+        for (const [name, width, height] of [['desktop', 1440, 1000], ['mobile', 390, 844]]) {
+          await page.setViewportSize({ width, height });
+          await page.evaluate(() => window.scrollTo(0, 0));
+          await expect(card).toBeVisible();
+          expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+          await page.screenshot({ path: `test-results/invitation-${name}.png`, fullPage: true });
+        }
+        await page.setViewportSize({ width: 1280, height: 720 });
+      }
     }
 
     // Account page (change password + delete account forms).

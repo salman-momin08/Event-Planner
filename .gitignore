@@ -12,6 +12,13 @@ __pycache__/
 *.db-shm
 *.log
 *.tmp
+coverage/
+.coverage
+.coverage.*
+htmlcov/
+dist/
+.ruff_cache/
+.mypy_cache/
 
 # Playwright (accessibility suite)
 test-results/

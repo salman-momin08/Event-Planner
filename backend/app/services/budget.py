@@ -55,9 +55,8 @@ def _sync_category_spent(ctx: Context, event_id: int, category_id: int, target_s
     )
     if target_spent_cents == current_spent:
         return
-    if target_spent_cents == 0:
-        ctx.db.execute("DELETE FROM expenses WHERE event_id = ? AND category_id = ?", (event_id, category_id))
-        return
+    if target_spent_cents < current_spent:
+        raise bad_request({"spentCents": "Edit or delete individual expenses to reduce spending without losing expense history"})
     if target_spent_cents > current_spent:
         diff = target_spent_cents - current_spent
         today = to_date_string(ctx.clock())
@@ -77,15 +76,6 @@ def _sync_category_spent(ctx: Context, event_id: int, category_id: int, target_s
                    VALUES (?, ?, NULL, 'Spent amount', ?, ?)""",
                 (event_id, category_id, diff, today),
             )
-    else:
-        # Replace category expenses with the exact updated spent amount
-        today = to_date_string(ctx.clock())
-        ctx.db.execute("DELETE FROM expenses WHERE event_id = ? AND category_id = ?", (event_id, category_id))
-        ctx.db.execute(
-            """INSERT INTO expenses (event_id, category_id, vendor_id, description, amount_cents, spent_on)
-               VALUES (?, ?, NULL, 'Spent amount', ?, ?)""",
-            (event_id, category_id, target_spent_cents, today),
-        )
 
 
 def create_category(ctx: Context, event_id: int, body: CategoryIn) -> dict:

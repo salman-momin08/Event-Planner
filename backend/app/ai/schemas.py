@@ -1,6 +1,7 @@
 """Pydantic schema for the model's plan. Validation here is the AI-output trust boundary (SEC-013)."""
 from __future__ import annotations
 
+import math
 import re
 from typing import Annotated, Any
 
@@ -41,11 +42,19 @@ def _ai_text(max_len: int, optional: bool = False):
 def _number(value: Any) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ValueError("must be a number")
-    return float(value)
+    try:
+        number = float(value)
+    except OverflowError:
+        raise ValueError("must be a finite number") from None
+    if not math.isfinite(number):
+        raise ValueError("must be a finite number")
+    return number
 
 
 def _whole(value: Any) -> int:
-    if isinstance(value, bool) or not isinstance(value, (int, float)) or float(value) != int(value):
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError("must be a whole number")
+    if isinstance(value, float) and (not math.isfinite(value) or not value.is_integer()):
         raise ValueError("must be a whole number")
     return int(value)
 

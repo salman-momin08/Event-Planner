@@ -9,6 +9,7 @@ export function h(tag, attrs, ...children) {
     if (key.startsWith('on') && typeof value === 'function') el.addEventListener(key.slice(2), value);
     else if (key === 'class') el.className = value;
     else if (key === 'for') el.htmlFor = value;
+    else if (key === 'style') el.style.cssText = String(value);
     else if (value === true) el.setAttribute(key, '');
     else el.setAttribute(key, String(value));
   }

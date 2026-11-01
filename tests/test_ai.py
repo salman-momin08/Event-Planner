@@ -450,3 +450,49 @@ def test_graph_extracts_json_wrapped_in_prose_on_first_attempt(make_app):
     r = c.post(f"{base}/ai/plans", {})
     assert r.status == 201
     assert len(model.calls) == 1
+
+
+@pytest.mark.parametrize("failure", ["timeout", "oversized"])
+def test_invitation_ai_failure_preserves_saved_data(make_app, failure):
+    async def respond(messages, call_number):
+        if failure == "timeout":
+            raise asyncio.TimeoutError
+        return "x" * 32_769
+
+    app, c, ev, base, _ = setup(make_app, respond)
+    saved = c.put(f"{base}/invitation", {"headline": "Keep me", "hostLine": "Host"}).json
+    result = c.post(f"{base}/invitation/ai-draft", {})
+    assert result.status == (504 if failure == "timeout" else 502)
+    assert c.get(f"{base}/invitation").json == saved
+
+
+def test_postgres_planning_smoke(make_app):
+    import os
+    import uuid
+    from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+    import psycopg
+    from psycopg import sql
+
+    dsn = os.environ.get("PLANNER_TEST_POSTGRES_URL", "")
+    if not dsn:
+        pytest.skip("Set PLANNER_TEST_POSTGRES_URL to a disposable PostgreSQL test database")
+    schema = "planner_test_" + uuid.uuid4().hex
+    parsed = urlsplit(dsn)
+    query = parse_qsl(parsed.query) + [("options", f"-c search_path={schema}")]
+    isolated_dsn = urlunsplit(parsed._replace(query=urlencode(query)))
+    with psycopg.connect(dsn, autocommit=True, connect_timeout=10) as admin:
+        admin.execute(sql.SQL("CREATE SCHEMA {}").format(sql.Identifier(schema)))
+        try:
+            app, c, ev, base, _ = setup(make_app, env={"DATABASE_URL": isolated_dsn})
+            category = c.post(f"{base}/budget-categories", {"name": "Food"}).json
+            assert c.post(f"{base}/expenses", {"categoryId": category["id"], "description": "Deposit", "amountCents": 50, "spentOn": "2026-11-01"}).status == 201
+            draft = c.post(f"{base}/ai/plans", {})
+            assert draft.status == 201
+            assert c.post(f"{base}/ai/plans/{draft.json['id']}/apply").status == 200
+            assert c.put(f"{base}/invitation", {"headline": "PostgreSQL card", "hostLine": "Host"}).status == 200
+            assert c.get(f"{base}/invitation").json["hostLine"] == "Host"
+            assert c.get(f"{base}/export?format=csv&section=expenses").status == 200
+            assert c.delete(base).status == 204
+            assert c.get("/events").json == []
+        finally:
+            admin.execute(sql.SQL("DROP SCHEMA {} CASCADE").format(sql.Identifier(schema)))

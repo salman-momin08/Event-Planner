@@ -25,6 +25,9 @@ def test_060_security_headers(make_app):
         assert r.headers["x-request-id"]
         assert "strict-transport-security" not in r.headers
     assert c.get("/auth/me").headers["cache-control"] == "no-store"
+    authenticated = app.sign_up()
+    assert authenticated.get("/auth/me").headers["cache-control"] == "no-store"
+    assert authenticated.get("/events").headers["cache-control"] == "no-store"
     prod = make_app(env={"APP_ENV": "production"}).client()
     assert "strict-transport-security" in prod.request("GET", "/healthz").headers
 

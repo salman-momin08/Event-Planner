@@ -15,10 +15,10 @@ def main() -> None:
         raise SystemExit(f"Invalid configuration: {err}") from None
     reload_enabled = settings.environment == "development" and os.environ.get("UVICORN_RELOAD", "1") != "0"
     if reload_enabled:
-        uvicorn.run("app.main:create_app", factory=True, host=settings.host, port=settings.port, reload=True, server_header=False, access_log=False)
+        uvicorn.run("app.main:create_app", factory=True, host=settings.host, port=settings.port, reload=True, server_header=False, access_log=False, proxy_headers=False)
     else:
         app = create_app(settings)
-        uvicorn.run(app, host=settings.host, port=settings.port, server_header=False, access_log=False)
+        uvicorn.run(app, host=settings.host, port=settings.port, server_header=False, access_log=False, proxy_headers=False)
 
 
 if __name__ == "__main__":

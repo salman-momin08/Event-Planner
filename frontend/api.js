@@ -26,7 +26,7 @@ export async function api(method, path, body) {
     throw new ApiError(0, { error: { code: 'network', message: 'Could not reach the server. Check your connection and try again.' } });
   }
   if (res.status === 204) return null;
-  let json = null;
+  let json;
   try {
     json = await res.json();
   } catch {
