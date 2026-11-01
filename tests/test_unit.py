@@ -3,23 +3,24 @@ from __future__ import annotations
 import asyncio
 
 import pytest
-
+from app.ai.prompts import build_context, context_json
+from app.ai.schemas import AiBadOutput, validate_plan
+from app.config import ConfigError, load_settings
 from app.dates import add_days, days_between, is_valid_date
 from app.money import cents_to_decimal, percent_to_cents
+from app.schemas import EventIn, EventPatch
 from app.security import RateLimiter
 from app.services.auth import hash_password_sync, verify_password_sync
 from app.services.export import Raw, csv_cell
-from app.config import ConfigError, load_settings
-from app.ai.prompts import build_context, context_json
-from app.ai.schemas import AiBadOutput, validate_plan
-from app.schemas import EventIn, EventPatch
 from app.validation import clean_text
 from pydantic import ValidationError
+
 from tests.conftest import valid_plan
 
 
 def test_postgres_dsn_defaults_remote_connections_to_tls():
     from urllib.parse import parse_qs, urlsplit
+
     from app.db import _normalize_pg_dsn
 
     for dsn in ("postgresql://u:p@remote.example/db?application_name=planner", "postgresql://remote.example/db", "postgresql://u:p@localhost.evil.example/db"):
@@ -47,6 +48,7 @@ def test_postgres_cursor_iteration_consumes_remaining_rows():
 
 def test_invitation_migration_preserves_saved_data():
     import sqlite3
+
     from app.db import SCHEMA_V1, SCHEMA_V2, _migrate
 
     database = sqlite3.connect(":memory:", isolation_level=None)
@@ -199,8 +201,8 @@ def test_041_invalid_and_adversarial_plans():
     _bad(lambda p: p["tasks"][0].update(daysBeforeEvent=1000))
     _bad(lambda p: p["tasks"][0].update(daysBeforeEvent="soon"))
     for value in (float("inf"), float("nan"), 10 ** 400):
-        _bad(lambda p: p["tasks"][0].update(daysBeforeEvent=value))
-        _bad(lambda p: p["budgetAllocations"][0].update(percent=value))
+        _bad(lambda p, v=value: p["tasks"][0].update(daysBeforeEvent=v))
+        _bad(lambda p, v=value: p["budgetAllocations"][0].update(percent=v))
     _bad(lambda p: p["tasks"][1].update(title=p["tasks"][0]["title"].upper()))
     _bad(lambda p: p["budgetAllocations"][0].update(percent=-5))
     _bad(lambda p: p["budgetAllocations"][0].update(percent="40"))

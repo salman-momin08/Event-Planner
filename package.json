@@ -14,6 +14,7 @@
     "build": "vite build",
     "lint": "eslint frontend",
     "lint:fix": "eslint frontend --fix",
+    "lint:backend": "ruff check backend tests",
     "format": "prettier --check \"frontend/**/*.{js,css,html}\"",
     "format:fix": "prettier --write \"frontend/**/*.{js,css,html}\"",
     "setup:backend": "python -m pip install -r backend/requirements-dev.txt",

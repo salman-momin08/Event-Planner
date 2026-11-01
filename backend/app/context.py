@@ -23,5 +23,5 @@ class Context:
     clock: Callable[[], datetime]
     logger: Logger
     limiters: dict[str, RateLimiter]
-    ai: "AiRuntime"
+    ai: AiRuntime
     extras: dict = field(default_factory=dict)

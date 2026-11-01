@@ -4,9 +4,10 @@ import time
 import uuid
 from collections.abc import Callable
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
+from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi import HTTPException as FastApiHTTPException
 from fastapi.exceptions import RequestValidationError
@@ -15,8 +16,6 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse, PlainTextResponse, Response
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
-
-from dotenv import load_dotenv
 
 from .ai.runtime import AiRuntime
 from .config import Settings, load_settings
@@ -28,7 +27,6 @@ from .routes import ai as ai_routes
 from .routes import auth as auth_routes
 from .routes import events as event_routes
 from .routes import planning as planning_routes
-from .services.auth import purge_security_events
 from .security import (
     MAX_BODY_BYTES,
     RateLimiter,
@@ -38,6 +36,7 @@ from .security import (
     enforce,
     security_headers,
 )
+from .services.auth import purge_security_events
 
 FRONTEND_DIR = Path(__file__).resolve().parents[2] / "frontend"
 API_PREFIX = "/api/v1"
@@ -101,7 +100,7 @@ class SecurityMiddleware(BaseHTTPMiddleware):
             response = await call_next(request)
         except ApiError as err:
             response = _error_response(err, request_id)
-        except Exception as err:  # unexpected: details go to the log only
+        except Exception as err:  # noqa: BLE001 — unexpected: details go to the log only
             ctx.logger.error("unhandled", requestId=request_id, error=type(err).__name__)
             response = _error_response(ApiError(500, "internal_error", "Something went wrong"), request_id)
         response.headers["X-Request-Id"] = request_id
@@ -113,7 +112,7 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         route_path = getattr(route, "path", None)
         if route_path is None:
             route_name = "static" if not request.url.path.startswith("/api/") else "-"
-        elif route_path.startswith("/healthz") or route_path.startswith("/{"):
+        elif route_path.startswith(("/healthz", "/{")):
             route_name = route_path
         else:
             route_name = API_PREFIX + route_path
@@ -178,10 +177,10 @@ def create_app(
         ai = AiRuntime.from_chat_model(chat_model, settings.ai, label=settings.ai.model_label or "custom")
     elif settings.ai.enabled:
         try:
-            from .ai.llm import build_chat_model
+            from .ai.llm import build_chat_model  # noqa: PLC0415 — lazy import keeps LangChain providers optional when AI is disabled
 
             ai = AiRuntime.from_chat_model(build_chat_model(settings.ai), settings.ai)
-        except Exception as err:  # misconfiguration must not stop core planning
+        except Exception as err:  # noqa: BLE001 — misconfiguration must not stop core planning
             logger.error("ai_init_failed", error=type(err).__name__)
             ai = AiRuntime.disabled()
     else:
@@ -191,7 +190,7 @@ def create_app(
     ctx = Context(
         settings=settings,
         db=db,
-        clock=clock or (lambda: datetime.now(timezone.utc)),
+        clock=clock or (lambda: datetime.now(UTC)),
         logger=logger,
         limiters={
             "api": RateLimiter(lim["api"], 60),

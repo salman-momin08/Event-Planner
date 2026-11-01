@@ -53,7 +53,7 @@ def check_content_type(request: Request) -> None:
     if request.method not in MUTATING:
         return
     has_body = request.headers.get("content-length", "0") not in {"", "0"} or "transfer-encoding" in request.headers
-    if has_body and not re.match(r"^application/json\s*(;|$)", request.headers.get("content-type", ""), re.I):
+    if has_body and not re.match(r"^application/json\s*(;|$)", request.headers.get("content-type", ""), re.IGNORECASE):
         raise ApiError(415, "unsupported_media_type", "Content-Type must be application/json")
 
 

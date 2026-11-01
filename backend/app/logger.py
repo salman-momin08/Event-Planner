@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import sys
 from collections.abc import Callable
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 
 class Logger:
@@ -16,7 +16,7 @@ class Logger:
     def _log(self, level: str, msg: str, fields: dict) -> None:
         if self._silent:
             return
-        record = {"ts": datetime.now(timezone.utc).isoformat(), "level": level, "msg": msg, **fields}
+        record = {"ts": datetime.now(UTC).isoformat(), "level": level, "msg": msg, **fields}
         self._write(json.dumps(record, default=str))
 
     def info(self, msg: str, **fields) -> None:

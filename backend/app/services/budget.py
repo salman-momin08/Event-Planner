@@ -126,7 +126,7 @@ def delete_category(ctx: Context, event_id: int, category_id: int) -> None:
         "SELECT COUNT(*) AS n FROM expenses WHERE category_id = ? AND event_id = ?", (category_id, event_id)
     ).fetchone()["n"]
     if n:
-        raise conflict("Move or delete this category’s expenses first", "category_in_use")
+        raise conflict("Move or delete this category’s expenses first", "category_in_use")  # noqa: RUF001 — typographic apostrophe in user-facing copy
     ctx.db.execute("DELETE FROM budget_categories WHERE id = ? AND event_id = ?", (category_id, event_id))
 
 

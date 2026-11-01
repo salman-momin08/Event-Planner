@@ -28,28 +28,28 @@ _BLOCKED_PROMPT_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
         "prompt_exfiltration",
         re.compile(
             r"\b(?:reveal|print|show|output|repeat|dump|expose)\s+(?:your\s+|the\s+)?(?:system\s+prompt|developer\s+prompt|hidden\s+instructions|api\s+key|secret\s+key|environment\s+variables)\b",
-            re.I,
+            re.IGNORECASE,
         ),
     ),
     (
         "jailbreak_mode",
         re.compile(
             r"\b(?:do\s+anything\s+now|dan\s+mode|jailbreak|developer\s+mode\s+enabled|bypass\s+all\s+safety|unrestricted\s+ai\s+mode|god\s+mode)\b",
-            re.I,
+            re.IGNORECASE,
         ),
     ),
     (
         "code_or_sql_execution",
         re.compile(
             r"(?:;\s*drop\s+table\b|\bunion\s+select\b|\bexec\s*\(|\b__import__\s*\(|\bsubprocess\.(?:run|Popen|call)|\bos\.system\s*\(|<\s*script\b|javascript\s*:)",
-            re.I,
+            re.IGNORECASE,
         ),
     ),
     (
         "delim_escape",
         re.compile(
             r"(?:<\|im_start\|>|<\|im_end\|>|\[INST\]|\[/INST\]|<<SYS>>|<</SYS>>|###\s*System\s*:)",
-            re.I,
+            re.IGNORECASE,
         ),
     ),
 )
@@ -90,7 +90,7 @@ def _contains_payment_card(text: str) -> bool:
 
 
 def inspect_ai_input(
-    ctx: "Context | None",
+    ctx: Context | None,
     user_id: int | None,
     fields: dict[str, str],
     *,
@@ -131,11 +131,11 @@ def inspect_ai_input(
 
 _POLYGLOT_PAYLOAD = re.compile(
     rb"(?:<\s*\?php|<\s*script\b|<\s*svg\b|<\s*html\b|<\s*iframe\b|javascript\s*:|__import__|eval\s*\()",
-    re.I,
+    re.IGNORECASE,
 )
 
 
-def _verify_image_data_url(ctx: "Context | None", user_id: int | None, data_url: str) -> None:
+def _verify_image_data_url(ctx: Context | None, user_id: int | None, data_url: str) -> None:
     matched_prefix = next((prefix for prefix in _IMAGE_SIGNATURES if data_url.startswith(prefix)), None)
     if matched_prefix is None:
         _record_blocked(ctx, user_id, "invalid_image_prefix")
@@ -195,12 +195,12 @@ def _verify_image_data_url(ctx: "Context | None", user_id: int | None, data_url:
 
 def scrub_ai_output_text(text: str) -> str:
     """Removes script-like tags and JavaScript URL prefixes; render the result as text only."""
-    s = re.sub(r"<\s*/?\s*(?:script|iframe|object|embed|svg|img|style|link|meta)\b[^>]*>", "", text, flags=re.I)
-    s = re.sub(r"javascript\s*:", "", s, flags=re.I)
+    s = re.sub(r"<\s*/?\s*(?:script|iframe|object|embed|svg|img|style|link|meta)\b[^>]*>", "", text, flags=re.IGNORECASE)
+    s = re.sub(r"javascript\s*:", "", s, flags=re.IGNORECASE)
     return s.strip()
 
 
-def _record_blocked(ctx: "Context | None", user_id: int | None, reason: str) -> None:
+def _record_blocked(ctx: Context | None, user_id: int | None, reason: str) -> None:
     if ctx is not None:
         record_security_event(ctx, user_id, "ai_guardrail_blocked", None)
         ctx.logger.warn("ai_guardrail_blocked", userId=user_id, reason=reason)

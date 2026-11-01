@@ -83,8 +83,8 @@ def get_invitation(ctx: Context, event: sqlite3.Row) -> dict:
 
 def save_invitation(ctx: Context, event: sqlite3.Row, body: InvitationUpdateIn) -> dict:
     ts = ctx.clock().isoformat()
-    theme_style = body.themeStyle if body.themeStyle else "royal_indigo"
-    layout_style = body.layoutStyle if body.layoutStyle else "classic_crest"
+    theme_style = body.themeStyle or "royal_indigo"
+    layout_style = body.layoutStyle or "classic_crest"
     params = (
         event["id"],
         body.headline or event["title"],
@@ -195,11 +195,11 @@ async def draft_invitation_copy(ctx: Context, user: dict, event: sqlite3.Row, bo
         parsed = _parse_json(parser, text)
         if not isinstance(parsed, dict):
             raise ValueError("not an object")
-    except asyncio.TimeoutError:
+    except TimeoutError:
         raise ApiError(504, "ai_timeout", "The AI assistant took too long to respond. Your invitation is unchanged.") from None
     except ApiError:
         raise
-    except Exception:
+    except Exception:  # noqa: BLE001 — any provider/parse failure maps to a generic 502; the invitation is unchanged
         raise ApiError(502, "ai_bad_output", "The AI response could not be used. Your invitation is unchanged.") from None
 
     final_theme = selected_theme

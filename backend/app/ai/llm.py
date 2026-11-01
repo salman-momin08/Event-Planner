@@ -69,7 +69,7 @@ class OpenAICompatibleChatModel(BaseChatModel):
         base = self.endpoint_url.rstrip("/")
         if base.endswith("/chat/completions"):
             return base
-        if base.endswith("/v1") or base.endswith("/openai"):
+        if base.endswith(("/v1", "/openai")):
             return f"{base}/chat/completions"
         return f"{base}/v1/chat/completions"
 
@@ -113,7 +113,7 @@ def build_chat_model(ai: AiSettings) -> BaseChatModel:
             max_tokens=ai.max_new_tokens,
         )
 
-    from langchain_huggingface import ChatHuggingFace, HuggingFaceEndpoint
+    from langchain_huggingface import ChatHuggingFace, HuggingFaceEndpoint  # noqa: PLC0415 — optional provider, imported only when selected
 
     kwargs: dict = {
         "task": "text-generation",

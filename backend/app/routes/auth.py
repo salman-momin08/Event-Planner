@@ -70,4 +70,4 @@ async def delete_me(body: DeleteAccountIn, request: Request, ctx: Context = Depe
     return response
 
 
-__all__ = ["router", "current_user"]
+__all__ = ["current_user", "router"]

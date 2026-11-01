@@ -3,8 +3,8 @@ from __future__ import annotations
 import sqlite3
 
 from ..context import Context
-from ..db import is_unique_violation, transaction, update_row
 from ..dates import to_date_string
+from ..db import is_unique_violation, transaction, update_row
 from ..errors import bad_request, conflict, limit_reached, not_found
 from ..schemas import TaskIn, TaskPatch
 

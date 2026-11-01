@@ -13,7 +13,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "backend"))
 
-from tests.fake_tgi import FakeTgi  # noqa: E402
+from tests.fake_tgi import FakeTgi
 
 if __name__ == "__main__":
     with FakeTgi(port=4020) as fake:

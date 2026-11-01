@@ -10,10 +10,10 @@ import asyncio
 import json
 from typing import Any, TypedDict
 
+from langchain_core.exceptions import OutputParserException
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from langchain_core.output_parsers import JsonOutputParser
-from langchain_core.exceptions import OutputParserException
 from langgraph.graph import END, START, StateGraph
 
 from ..errors import ApiError
@@ -66,11 +66,11 @@ def build_plan_graph(model: BaseChatModel, *, timeout_s: float, max_repairs: int
     async def generate(state: PlanState) -> PlanState:
         try:
             reply = await asyncio.wait_for(model.ainvoke(state["messages"]), timeout=timeout_s)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             raise ai_timeout() from None
         except ApiError:
             raise
-        except Exception:  # provider/network failure: details stay out of responses
+        except Exception:  # noqa: BLE001 — provider/network failure: details stay out of responses
             raise ai_unavailable() from None
         return {"raw": _text_of(reply)[:60000], "attempts": state.get("attempts", 0) + 1}
 

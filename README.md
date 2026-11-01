@@ -43,14 +43,18 @@ cd backend
 ```powershell
 .\.venv\Scripts\python -m pytest          # Python suite (API, AI workflow, static frontend checks) + branch coverage report
 npm run test:unit                         # Vitest + jsdom: dom.js helpers, studio modules, XSS safety, form validation + coverage
-npm run test:a11y                         # Playwright + axe-core: WCAG 2.2 AA on the real rendered UI
+npm run test:a11y                         # Playwright + axe-core: WCAG 2.2 AA on the real rendered UI, incl. keyboard-only flows
 npm run lint && npm run format            # ESLint + Prettier (frontend)
+npm run lint:backend                      # Ruff (backend + tests): pyflakes, bugbear, pyupgrade, import order
 npm run audit:backend                     # pip-audit on backend/requirements.txt
 npm run audit                             # npm audit on frontend tooling
 ```
 
 Both test suites emit coverage reports (pytest-cov term-missing with branch coverage for
 `backend/app`, V8 coverage for `frontend/`) on every run, locally and in CI.
+GitHub Actions additionally runs CodeQL (`security-and-quality` queries for JavaScript and
+Python) on every push and weekly, and Dependabot keeps pip, npm, Actions, and Docker
+dependencies current (see [SECURITY.md](SECURITY.md)).
 
 `test:a11y` installs browsers once with `npx playwright install chromium` and boots the backend itself
 with an isolated temporary SQLite database. Set `PLANNER_TEST_POSTGRES_URL` to a disposable PostgreSQL

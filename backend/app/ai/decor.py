@@ -219,11 +219,11 @@ async def analyze_decor(ctx: Context, user: dict, event: sqlite3.Row, body: Deco
 
     try:
         reply = await asyncio.wait_for(ctx.ai.model.ainvoke(messages), timeout=ctx.settings.ai.timeout_s)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         raise ai_timeout() from None
     except ApiError:
         raise
-    except Exception:
+    except Exception:  # noqa: BLE001 — provider/network failures map to a generic 502; details stay out of responses
         raise ai_unavailable() from None
 
     raw_text = _text_of(reply)[:60000]
@@ -293,13 +293,16 @@ def apply_decor_analysis(ctx: Context, event: sqlite3.Row, decor_id: int, body: 
         if percent > 0:
             cat_rows = ctx.db.execute("SELECT name FROM budget_categories WHERE event_id = ?", (event_id,)).fetchall()
             existing_cats = {r["name"].lower() for r in cat_rows}
-            if "decor & styling" not in existing_cats and "decor" not in existing_cats:
-                if len(existing_cats) < BUDGET_LIMITS["categories"]:
-                    ctx.db.execute(
-                        "INSERT INTO budget_categories (event_id, name, planned_cents) VALUES (?, 'Decor & Styling', ?)",
-                        (event_id, percent_to_cents(event["budget_cents"], percent)),
-                    )
-                    cat_created = 1
+            if (
+                "decor & styling" not in existing_cats
+                and "decor" not in existing_cats
+                and len(existing_cats) < BUDGET_LIMITS["categories"]
+            ):
+                ctx.db.execute(
+                    "INSERT INTO budget_categories (event_id, name, planned_cents) VALUES (?, 'Decor & Styling', ?)",
+                    (event_id, percent_to_cents(event["budget_cents"], percent)),
+                )
+                cat_created = 1
 
         ctx.db.execute("UPDATE decor_analyses SET status = 'applied' WHERE id = ? AND event_id = ?", (decor_id, event_id))
 

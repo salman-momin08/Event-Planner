@@ -1,17 +1,21 @@
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 
+// The register endpoint is rate-limited per test window, so the spec shares one account:
+// registered on first use, logged into again for later tests (each page is a fresh context).
+const credentials = { displayName: 'Invitation Tester', email: `invitation-${Date.now()}@example.com`, password: 'correct horse battery staple' };
+let registered = false;
+
 test.beforeEach(async ({ page }) => {
   const headers = { 'X-Requested-With': 'planner' };
-  const account = await page.request.post('/api/v1/auth/register', {
-    headers,
-    data: {
-      displayName: 'Invitation Tester',
-      email: `invitation-${Date.now()}@example.com`,
-      password: 'correct horse battery staple',
-    },
-  });
-  expect(account.ok()).toBe(true);
+  if (registered) {
+    const login = await page.request.post('/api/v1/auth/login', { headers, data: { email: credentials.email, password: credentials.password } });
+    expect(login.ok()).toBe(true);
+  } else {
+    const account = await page.request.post('/api/v1/auth/register', { headers, data: credentials });
+    expect(account.ok()).toBe(true);
+    registered = true;
+  }
   const response = await page.request.post('/api/v1/events', {
     headers,
     data: {

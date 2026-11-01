@@ -19,6 +19,8 @@ This project is built security-first; automated checks run on every push and pul
 
 - **Dependency auditing:** `pip-audit` (backend) and `npm audit` (frontend tooling) in CI,
   plus Dependabot version updates for pip, npm, GitHub Actions, and Docker.
+- **Static analysis (SAST):** CodeQL with `security-and-quality` queries scans JavaScript and
+  Python on every push and weekly; Ruff lints the backend for likely bugs and security smells.
 - **Application hardening:** CSRF token checks, per-IP rate limiting, 64 KiB request-body cap,
   strict security response headers (`CSP`, `X-Content-Type-Options`, `X-Frame-Options`,
   `Referrer-Policy`), and generic 500 responses that never leak internals.

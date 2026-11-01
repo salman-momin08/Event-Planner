@@ -11,7 +11,7 @@ from ..errors import ApiError
 from ..validation import clean_text
 
 _EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
-_URL = re.compile(r"\b(?:https?://|www\.)\S+", re.I)
+_URL = re.compile(r"\b(?:https?://|www\.)\S+", re.IGNORECASE)
 _PHONE = re.compile(r"\+?\d[\d\s().-]{7,}\d")
 
 
@@ -95,7 +95,7 @@ class Plan(_Model):
     vendorSuggestions: Annotated[list[VendorSuggestion], Field(max_length=10)] = []
 
     @model_validator(mode="after")
-    def _business_rules(self) -> "Plan":
+    def _business_rules(self) -> Plan:
         if sum(round(b.percent, 2) for b in self.budgetAllocations) > 100.01:
             raise ValueError("budget percentages exceed 100")
         for label, values in (
@@ -119,9 +119,9 @@ class Plan(_Model):
                 if dep_key not in deps:
                     deps.append(dep_key)
             graph[key] = deps
-        for start in graph:
+        for start, start_deps in graph.items():
             seen: set[str] = set()
-            stack = list(graph[start])
+            stack = list(start_deps)
             while stack:
                 cur = stack.pop()
                 if cur == start:

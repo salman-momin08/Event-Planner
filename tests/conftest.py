@@ -3,22 +3,21 @@ from __future__ import annotations
 import asyncio
 import json
 from contextlib import ExitStack
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
+from app.config import load_settings
+from app.db import open_database
+from app.logger import Logger
+from app.main import create_app
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 from pydantic import Field
 from starlette.testclient import TestClient
 
-from app.config import load_settings
-from app.db import open_database
-from app.logger import Logger
-from app.main import create_app
-
-FIXED_NOW = datetime(2026, 10, 20, 12, 0, tzinfo=timezone.utc)
+FIXED_NOW = datetime(2026, 10, 20, 12, 0, tzinfo=UTC)
 PASSWORD = "correct horse battery"
 
 

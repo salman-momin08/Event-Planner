@@ -1,5 +1,6 @@
 """Run with: python -m app"""
 import os
+
 import uvicorn
 from dotenv import load_dotenv
 

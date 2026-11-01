@@ -18,10 +18,10 @@ class AiRuntime:
     model: BaseChatModel | None = None
 
     @classmethod
-    def disabled(cls) -> "AiRuntime":
+    def disabled(cls) -> AiRuntime:
         return cls(available=False, model_label="", graph=None, model=None)
 
     @classmethod
-    def from_chat_model(cls, model: BaseChatModel, ai: AiSettings, label: str | None = None) -> "AiRuntime":
+    def from_chat_model(cls, model: BaseChatModel, ai: AiSettings, label: str | None = None) -> AiRuntime:
         graph = build_plan_graph(model, timeout_s=ai.timeout_s, max_repairs=ai.max_repairs)
         return cls(available=True, model_label=label or ai.model_label or "custom", graph=graph, model=model)

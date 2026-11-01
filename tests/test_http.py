@@ -7,6 +7,7 @@ from app.db import open_database
 from app.logger import Logger
 from app.main import create_app
 from starlette.testclient import TestClient
+
 from tests.conftest import Client
 
 
@@ -59,7 +60,7 @@ def test_061b_logs_never_contain_secrets_or_bodies():
     lines: list[str] = []
     db = open_database(":memory:")
     app = create_app(load_settings({}), db=db, logger=Logger(write=lines.append))
-    with TestClient(app) as http:
+    with TestClient(app) as _http:
         c = Client(app)
         r = c.post("/auth/register", {"email": "log@example.com", "displayName": "Log", "password": "super secret passphrase"})
         assert r.status == 201

@@ -1,0 +1,37 @@
+# Ruff configuration for the FastAPI backend and pytest suites.
+# Runs in CI (backend job) and locally via `npm run lint:backend`.
+
+target-version = "py312"
+line-length = 160
+
+[lint]
+select = [
+  "E", "W",   # pycodestyle errors & warnings
+  "F",        # pyflakes
+  "I",        # isort
+  "UP",       # pyupgrade (modern Python idioms)
+  "B",        # flake8-bugbear (likely bugs)
+  "C4",       # flake8-comprehensions
+  "SIM",      # flake8-simplify
+  "PIE",      # flake8-pie
+  "PLC",      # pylint conventions
+  "PLE",      # pylint errors
+  "TRY",      # exception hygiene
+  "BLE",      # blind except
+  "G",        # logging format
+  "RUF",      # ruff-specific checks
+  "FURB",     # refurb
+]
+ignore = [
+  "B008",   # FastAPI idiom: Depends()/Query() in argument defaults is how the framework wires injection
+  "TRY004", # Pydantic validators must raise ValueError (not TypeError) to produce 422 responses
+  "E501",   # AI prompt templates and SQL literals intentionally exceed the line length
+  "G010",   # app.logger.Logger is a custom JSON logger whose level method is named `warn` by design
+  "TRY003", # long messages in `raise` statements are clearer inline than pre-assigned to variables
+  "TRY300", # flagging code after `try` bodies as "consider else" is not this codebase's style
+  "TRY301", # raising inside `try` to funnel into a shared handler is deliberate (error mapping)
+  "TRY400", # app.logger.Logger is a custom JSON logger without an `exception` level
+]
+
+[lint.per-file-ignores]
+"tests/**" = ["PLC0415"] # test helpers import inside fixtures on purpose

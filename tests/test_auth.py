@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from tests.conftest import FIXED_NOW, PASSWORD
 from datetime import timedelta
+
+from tests.conftest import FIXED_NOW, PASSWORD
 
 
 def test_002_005_007_register_session_cookie_logout_login(make_app):

@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from typing import Self
 
 from tests.conftest import valid_plan
 
@@ -15,7 +16,7 @@ class FakeTgi:
         outer = self
 
         class Handler(BaseHTTPRequestHandler):
-            def do_POST(self):  # noqa: N802
+            def do_POST(self):
                 length = int(self.headers.get("content-length", 0))
                 payload = json.loads(self.rfile.read(length) or b"{}")
                 outer.requests.append({"path": self.path, "auth": self.headers.get("authorization"), "payload": payload})
@@ -26,7 +27,7 @@ class FakeTgi:
                         "choices": [{"index": 0, "finish_reason": "stop", "message": {"role": "assistant", "content": content}}],
                         "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
                     }
-                except Exception as err:  # simulate provider failure
+                except Exception as err:  # noqa: BLE001 — simulate provider failure for any payload problem
                     status, body = 500, {"error": str(err)}
                 data = json.dumps(body).encode()
                 self.send_response(status)
@@ -42,7 +43,7 @@ class FakeTgi:
         self.url = f"http://127.0.0.1:{self.server.server_port}"
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
 
-    def __enter__(self) -> "FakeTgi":
+    def __enter__(self) -> Self:
         self.thread.start()
         return self
 

@@ -19,7 +19,7 @@ def world(make_app):
     ).json
     plan = alice.post(f"{base}/ai/plans", {}).json
     assert plan["status"] == "draft"
-    return dict(app=app, alice=alice, bob=bob, ev=ev, base=base, cat=cat, vendor=vendor, task=task, expense=expense, plan=plan)
+    return {"app": app, "alice": alice, "bob": bob, "ev": ev, "base": base, "cat": cat, "vendor": vendor, "task": task, "expense": expense, "plan": plan}
 
 
 def test_003_other_user_cannot_read_modify_delete_event(world):

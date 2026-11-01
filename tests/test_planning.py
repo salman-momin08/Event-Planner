@@ -15,7 +15,7 @@ def setup(make_app):
 
 
 def test_event_validation_and_update(setup):
-    app, c, ev, base = setup()
+    _app, c, ev, base = setup()
     bad = c.post("/events", {"type": "party", "title": "", "eventDate": "2027-02-30", "attendance": 0, "budgetCents": -1, "currency": "XXX"})
     assert bad.status == 400
     assert sorted(bad.json["error"]["details"]) == ["attendance", "budgetCents", "currency", "eventDate", "title", "type"]
@@ -29,7 +29,7 @@ def test_event_validation_and_update(setup):
 
 
 def test_011_budget_summary_after_edits(setup):
-    app, c, ev, base = setup(budgetCents=100_000)
+    _app, c, _ev, base = setup(budgetCents=100_000)
     food = c.post(f"{base}/budget-categories", {"name": "Food", "plannedCents": 40_000}).json
     decor = c.post(f"{base}/budget-categories", {"name": "Decor", "plannedCents": 20_000}).json
     b = c.get(f"{base}/summary").json["budget"]
@@ -65,7 +65,7 @@ def test_011_budget_summary_after_edits(setup):
 
 
 def test_event_deletion_with_expenses(setup):
-    app, c, ev, base = setup()
+    app, c, _ev, base = setup()
     category = c.post(f"{base}/budget-categories", {"name": "Food"}).json
     assert c.post(f"{base}/expenses", {"categoryId": category["id"], "description": "Deposit", "amountCents": 50, "spentOn": "2026-11-01"}).status == 201
     assert c.delete(base).status == 204
@@ -74,7 +74,7 @@ def test_event_deletion_with_expenses(setup):
 
 @pytest.mark.parametrize("target", [0, 30])
 def test_category_spent_reduction_preserves_expense_history(setup, target):
-    app, c, ev, base = setup()
+    _app, c, _ev, base = setup()
     category = c.post(f"{base}/budget-categories", {"name": "Food"}).json
     expense = c.post(f"{base}/expenses", {"categoryId": category["id"], "description": "Vendor deposit", "amountCents": 50, "spentOn": "2026-11-01"}).json
     result = c.patch(f"{base}/budget-categories/{category['id']}", {"name": "Changed", "spentCents": target})
@@ -84,7 +84,7 @@ def test_category_spent_reduction_preserves_expense_history(setup, target):
 
 
 def test_schedule_template_limit_counts_duplicate_titles(setup):
-    app, c, ev, base = setup()
+    _app, c, _ev, base = setup()
     for _ in range(120):
         assert c.post(f"{base}/schedule", {"startTime": "12:00", "durationMinutes": 30, "title": "Repeated"}).status == 201
     assert c.post(f"{base}/schedule/generate-template").status == 409
@@ -92,7 +92,7 @@ def test_schedule_template_limit_counts_duplicate_titles(setup):
 
 
 def test_012_category_in_use_and_duplicates(setup):
-    app, c, ev, base = setup()
+    _app, c, _ev, base = setup()
     cat = c.post(f"{base}/budget-categories", {"name": "Food", "plannedCents": 100}).json
     assert c.post(f"{base}/budget-categories", {"name": "FOOD"}).status == 409
     x = c.post(f"{base}/expenses", {"categoryId": cat["id"], "description": "a", "amountCents": 5, "spentOn": "2026-11-01"}).json
@@ -103,7 +103,7 @@ def test_012_category_in_use_and_duplicates(setup):
 
 
 def test_013_032_expense_refs_same_event_and_vendor_delete_unlinks(setup):
-    app, c, ev, base = setup()
+    app, c, _ev, base = setup()
     other = app.make_event(c, title="Other")
     other_cat = c.post(f"/events/{other['id']}/budget-categories", {"name": "Food"}).json
     other_vendor = c.post(f"/events/{other['id']}/vendors", {"name": "Elsewhere"}).json
@@ -126,7 +126,7 @@ def test_013_032_expense_refs_same_event_and_vendor_delete_unlinks(setup):
 
 
 def test_020_to_023_tasks_dependencies(setup):
-    app, c, ev, base = setup()
+    app, c, _ev, base = setup()
     a = c.post(f"{base}/tasks", {"title": "Book venue", "dueDate": "2027-01-01"}).json
     assert a["status"] == "todo"
     assert c.post(f"{base}/tasks", {"title": "book VENUE"}).status == 409
@@ -160,7 +160,7 @@ def test_020_to_023_tasks_dependencies(setup):
 
 
 def test_024_timeline_order_and_overdue(setup):
-    app, c, ev, base = setup()
+    _app, c, _ev, base = setup()
     for body in (
         {"title": "Later", "dueDate": "2027-01-01"},
         {"title": "Past", "dueDate": "2026-10-01"},
@@ -178,7 +178,7 @@ def test_024_timeline_order_and_overdue(setup):
 
 
 def test_025_026_template_timeline(setup):
-    app, c, ev, base = setup(type="birthday", eventDate="2026-12-01")
+    _app, c, _ev, base = setup(type="birthday", eventDate="2026-12-01")
     first = c.post(f"{base}/timeline/generate-template")
     assert first.status == 200 and first.json["created"] > 5 and first.json["skipped"] == 0
     tasks = c.get(f"{base}/tasks").json
@@ -200,7 +200,7 @@ def test_025_026_template_timeline(setup):
 
 
 def test_030_031_vendors(setup):
-    app, c, ev, base = setup()
+    _app, c, _ev, base = setup()
     v = c.post(f"{base}/vendors", {"name": "Bloom & Co", "category": "Florist", "quoteCents": 120_000, "contact": "<img src=x onerror=alert(1)>"}).json
     assert v["status"] == "researching" and v["contact"] == "<img src=x onerror=alert(1)>"
     assert c.patch(f"{base}/vendors/{v['id']}", {"status": "booked", "quoteCents": None}).json["quoteCents"] is None
@@ -213,7 +213,7 @@ def test_030_031_vendors(setup):
 
 
 def test_050_051_exports(setup):
-    app, c, ev, base = setup()
+    _app, c, _ev, base = setup()
     cat = c.post(f"{base}/budget-categories", {"name": "Food", "plannedCents": 100}).json
     c.post(f"{base}/expenses", {"categoryId": cat["id"], "description": "=cmd|' /C calc'!A0", "amountCents": 12_345, "spentOn": "2026-11-01"})
     c.post(f"{base}/tasks", {"title": "@SUM(1+1)", "description": "a,b"})
@@ -235,7 +235,7 @@ def test_050_051_exports(setup):
 
 
 def test_per_event_limits(setup):
-    app, c, ev, base = setup()
+    _app, c, _ev, base = setup()
     for i in range(200):
         assert c.post(f"{base}/vendors", {"name": f"v{i}"}).status == 201
     r = c.post(f"{base}/vendors", {"name": "one too many"})
@@ -243,7 +243,7 @@ def test_per_event_limits(setup):
 
 
 def test_event_date_change_shifts_dated_tasks(setup):
-    app, c, ev, base = setup(eventDate="2027-06-10")
+    _app, c, _ev, base = setup(eventDate="2027-06-10")
     t1 = c.post(f"{base}/tasks", {"title": "Dated task", "dueDate": "2027-05-01"}).json
     t2 = c.post(f"{base}/tasks", {"title": "Undated task"}).json
 
@@ -260,7 +260,7 @@ def test_event_date_change_shifts_dated_tasks(setup):
 
 
 def test_template_timeline_dependencies(setup):
-    app, c, ev, base = setup(type="birthday", eventDate="2026-12-01")
+    _app, c, _ev, base = setup(type="birthday", eventDate="2026-12-01")
     assert c.post(f"{base}/timeline/generate-template").status == 200
     by = {t["title"]: t for t in c.get(f"{base}/tasks").json}
     assert by["Choose date and venue"]["id"] in by["Send invitations"]["dependsOn"]

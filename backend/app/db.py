@@ -359,7 +359,7 @@ class PgRow(dict):
     """Row object supporting both `row['col']` mapping access and `row[0]` positional indexing like `sqlite3.Row`."""
 
     def __init__(self, columns: Sequence[str], values: Sequence[Any]) -> None:
-        super().__init__(zip(columns, values))
+        super().__init__(zip(columns, values, strict=True))
         self._values = tuple(values)
 
     def __getitem__(self, key: Any) -> Any:
@@ -385,16 +385,16 @@ def _translate_sql_for_postgres(sql: str) -> tuple[str, bool]:
     pg_sql = "".join(out)
 
     # Translate ORDER BY name COLLATE NOCASE -> ORDER BY LOWER(name)
-    pg_sql = re.sub(r"\b([A-Za-z_][A-Za-z0-9_.]*)\s+COLLATE\s+NOCASE\b", r"LOWER(\1)", pg_sql, flags=re.I)
+    pg_sql = re.sub(r"\b([A-Za-z_][A-Za-z0-9_.]*)\s+COLLATE\s+NOCASE\b", r"LOWER(\1)", pg_sql, flags=re.IGNORECASE)
 
     # Translate INSERT OR IGNORE INTO table ... -> INSERT INTO table ... ON CONFLICT DO NOTHING
-    if re.match(r"^\s*INSERT\s+OR\s+IGNORE\s+INTO\b", pg_sql, flags=re.I):
-        pg_sql = re.sub(r"^\s*INSERT\s+OR\s+IGNORE\s+INTO\b", "INSERT INTO", pg_sql, count=1, flags=re.I)
+    if re.match(r"^\s*INSERT\s+OR\s+IGNORE\s+INTO\b", pg_sql, flags=re.IGNORECASE):
+        pg_sql = re.sub(r"^\s*INSERT\s+OR\s+IGNORE\s+INTO\b", "INSERT INTO", pg_sql, count=1, flags=re.IGNORECASE)
         pg_sql = f"{pg_sql.rstrip(';')} ON CONFLICT DO NOTHING"
 
     # Append RETURNING id for single-row INSERTs into serial-id tables so cur.lastrowid works identically
     needs_returning = False
-    m = re.match(r"^\s*INSERT\s+INTO\s+([A-Za-z_][A-Za-z0-9_]*)\b", pg_sql, flags=re.I)
+    m = re.match(r"^\s*INSERT\s+INTO\s+([A-Za-z_][A-Za-z0-9_]*)\b", pg_sql, flags=re.IGNORECASE)
     if m and m.group(1).lower() in _SERIAL_ID_TABLES and "RETURNING " not in pg_sql.upper() and "ON CONFLICT" not in pg_sql.upper():
         pg_sql = f"{pg_sql.rstrip(';')} RETURNING id"
         needs_returning = True
@@ -471,7 +471,7 @@ class PostgresDatabase:
 
     def __init__(self, dsn: str) -> None:
         try:
-            import psycopg
+            import psycopg  # noqa: PLC0415 — optional driver, imported only for PostgreSQL deployments
         except ImportError as err:
             raise RuntimeError(
                 "psycopg is required when DATABASE_URL points to PostgreSQL. Install with: pip install 'psycopg[binary]'"

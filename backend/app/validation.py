@@ -3,14 +3,12 @@ from __future__ import annotations
 
 import re
 import unicodedata
-from typing import Annotated, TypeVar
+from typing import Annotated
 
 from pydantic import AfterValidator, BaseModel, BeforeValidator, ConfigDict, Field
 
 from .dates import is_valid_date
 from .money import MAX_CENTS
-
-T = TypeVar("T")
 
 # Keeps \t and \n; strips other control characters.
 _CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
@@ -87,7 +85,7 @@ def _reject_null(value: object) -> object:
     return value
 
 
-def NonNull(tp: type[T]) -> type[T | None]:
+def NonNull[T](tp: type[T]) -> type[T | None]:
     """Allows omitting a field on PATCH (default None) while rejecting explicit JSON null."""
     return Annotated[tp | None, BeforeValidator(_reject_null)]  # type: ignore[return-value]
 
