@@ -63,7 +63,7 @@ def delete_vendor(ctx: Context, event_id: int, vendor_id: int) -> None:
 
 def vendor_stats(ctx: Context, event_id: int) -> dict:
     row = ctx.db.execute(
-        "SELECT COUNT(*) AS total, COALESCE(SUM(status = 'booked'), 0) AS booked FROM vendors WHERE event_id = ?",
+        "SELECT COUNT(*) AS total, COALESCE(SUM(CASE WHEN status = 'booked' THEN 1 ELSE 0 END), 0) AS booked FROM vendors WHERE event_id = ?",
         (event_id,),
     ).fetchone()
     return {"total": row["total"], "booked": row["booked"]}

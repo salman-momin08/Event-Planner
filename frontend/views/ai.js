@@ -127,7 +127,6 @@ export async function aiSection(ev, { refresh }) {
     h(
       'p',
       null,
-      'The assistant drafts themes, a budget split and a task list. It never changes your plan by itself: you review a draft, then choose to apply it. Dates and amounts are always calculated by the app, not the AI.',
     ),
     h(
       'details',

@@ -16,6 +16,8 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse, PlainTextResponse, Response
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from dotenv import load_dotenv
+
 from .ai.runtime import AiRuntime
 from .config import Settings, load_settings
 from .context import Context
@@ -163,10 +165,12 @@ def create_app(
     logger: Logger | None = None,
     limits: dict[str, int] | None = None,
 ) -> FastAPI:
-    settings = settings or load_settings()
+    if settings is None:
+        load_dotenv()
+        settings = load_settings()
     logger = logger or Logger()
     owns_db = db is None
-    db = db or open_database(settings.database_path)
+    db = db or open_database(settings.database_path, settings.database_url)
 
     if chat_model is not None:
         ai = AiRuntime.from_chat_model(chat_model, settings.ai, label=settings.ai.model_label or "custom")

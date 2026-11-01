@@ -43,6 +43,7 @@ class Settings:
     session_ttl_seconds: int
     security_log_key: bytes
     ai: AiSettings
+    database_url: str = ""
     warnings: tuple[str, ...] = ()
 
     @property
@@ -171,11 +172,20 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
         daily_limit=_int(env, "AI_DAILY_LIMIT", 20, 1, 1000),
         max_repairs=_int(env, "AI_MAX_REPAIRS", 2, 0, 3),
     )
+    database_path = env.get("DATABASE_PATH", "./data/planner.db").strip()
+    database_url = (env.get("DATABASE_URL") or "").strip()
+    if not database_url and database_path.startswith(("postgresql://", "postgres://", "sqlite://")):
+        database_url = database_path
+        database_path = "./data/planner.db"
+    if database_url and not database_url.startswith(("postgresql://", "postgres://", "sqlite://")):
+        raise ConfigError("DATABASE_URL must start with postgresql://, postgres://, or sqlite://")
+
     return Settings(
         environment=environment,
         host=env.get("HOST", "127.0.0.1"),
         port=_int(env, "PORT", 3000, 0, 65535),
-        database_path=env.get("DATABASE_PATH", "./data/planner.db"),
+        database_path=database_path,
+        database_url=database_url,
         cookie_secure=cookie_secure,
         hsts=production,
         trust_proxy=_bool(env, "TRUST_PROXY", False),

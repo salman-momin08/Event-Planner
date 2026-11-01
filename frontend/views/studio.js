@@ -1149,7 +1149,7 @@ export async function invitationSection(ev, { refresh }) {
     { name: 'headline', label: 'Main headline / Event title', required: true, max: 120 },
     { name: 'subheadline', label: 'Occasion subtitle', max: 160 },
     { name: 'bodyText', label: 'Invitation message', kind: 'textarea', rows: 4, max: 600 },
-    { name: 'dressCode', label: 'Attire / Dress code (optional)', max: 80, hint: 'For example: Traditional Festive, Garden Formal, Casual' },
+    { name: 'dressCode', label: 'Dress code / Other', max: 80, hint: 'For example: Traditional Festive, Garden Formal, Casual' },
   ];
 
   const saveFieldNames = ['themeStyle', 'layoutStyle', 'hostLine', 'headline', 'subheadline', 'bodyText', 'dressCode'];

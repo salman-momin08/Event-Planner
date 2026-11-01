@@ -57,7 +57,8 @@ def _decorate(rows: list[sqlite3.Row], graph: dict[int, list[int]], today: str) 
 
 def list_tasks(ctx: Context, event_id: int) -> list[dict]:
     rows = ctx.db.execute(
-        "SELECT * FROM tasks WHERE event_id = ? ORDER BY due_date IS NULL, due_date, id", (event_id,)
+        "SELECT * FROM tasks WHERE event_id = ? ORDER BY CASE WHEN due_date IS NULL THEN 1 ELSE 0 END, due_date, id",
+        (event_id,),
     ).fetchall()
     return _decorate(rows, _dependency_map(ctx, event_id), to_date_string(ctx.clock()))
 
@@ -184,14 +185,14 @@ def task_stats(ctx: Context, event_id: int) -> dict:
     row = ctx.db.execute(
         """SELECT
              COUNT(*) AS total,
-             COALESCE(SUM(t.status = 'done'), 0) AS done,
-             COALESCE(SUM(t.status != 'done' AND t.due_date IS NOT NULL AND t.due_date < ?), 0) AS overdue,
+             COALESCE(SUM(CASE WHEN t.status = 'done' THEN 1 ELSE 0 END), 0) AS done,
+             COALESCE(SUM(CASE WHEN t.status != 'done' AND t.due_date IS NOT NULL AND t.due_date < ? THEN 1 ELSE 0 END), 0) AS overdue,
              COALESCE(SUM(
-               t.status != 'done' AND EXISTS (
+               CASE WHEN t.status != 'done' AND EXISTS (
                  SELECT 1 FROM task_dependencies td
                  JOIN tasks p ON p.id = td.depends_on_id
                  WHERE td.task_id = t.id AND p.status != 'done'
-               )
+               ) THEN 1 ELSE 0 END
              ), 0) AS blocked
            FROM tasks t WHERE t.event_id = ?""",
         (today, event_id),
