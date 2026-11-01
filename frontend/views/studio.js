@@ -830,7 +830,7 @@ function drawCanvasCornerFlora(ctx, W, H, theme) {
     .replace(/currentColor/g, theme.border)
     .replace(/var\(--inv-inner,\s*#[0-9a-fA-F]+\)/g, theme.innerBg);
 
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => {
       // Top-Right inside inner panel (inner panel is x: 70..W-70, y: 70..H-70)
@@ -844,13 +844,13 @@ function drawCanvasCornerFlora(ctx, W, H, theme) {
       ctx.restore();
       resolve();
     };
-    img.onerror = () => resolve();
+    img.onerror = () => reject(new Error('Could not render the invitation decorations. Please try downloading again.'));
     img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(rawSvg)}`;
   });
 }
 
 /** Draws a high-resolution (1200x1600) invitation card onto an HTML5 Canvas that matches the Live Card Preview 1:1. */
-async function downloadInvitationPng(ev, inv) {
+async function createInvitationPng(ev, inv) {
   const theme = INVITATION_THEMES[inv.themeStyle] ?? INVITATION_THEMES.royal_indigo;
   const layout = inv.layoutStyle || 'classic_crest';
   const isLeftAligned = layout === 'modern_editorial' || layout === 'minimal_split';
@@ -862,6 +862,7 @@ async function downloadInvitationPng(ev, inv) {
   canvas.width = W;
   canvas.height = H;
   const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Your browser could not create the invitation image. Please try again in a regular browser tab.');
 
   // Outer card background
   ctx.fillStyle = theme.bg;
@@ -993,10 +994,12 @@ async function downloadInvitationPng(ev, inv) {
   }
   ctx.restore();
 
-  const link = document.createElement('a');
-  link.download = `${ev.title.toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'invitation'}-card.png`;
-  link.href = canvas.toDataURL('image/png');
-  link.click();
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (blob) resolve(blob);
+      else reject(new Error('Could not export the invitation as a PNG. Please try downloading again.'));
+    }, 'image/png');
+  });
 }
 
 function wrapCanvasText(ctx, text, x, startY, maxWidth, lineHeight) {
@@ -1127,6 +1130,49 @@ export async function invitationSection(ev) {
   let currentState = { ...inv };
 
   const saveBanner = h('p', { class: 'alert', role: 'status', hidden: true });
+  const downloadLink = h(
+    'a',
+    {
+      class: 'btn secondary',
+      download: `${ev.title.toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'invitation'}-card.png`,
+      hidden: true,
+    },
+    'Save PNG to device',
+  );
+  const downloadStatus = h('p', { class: 'hint', role: 'status', hidden: true });
+  let downloadUrl = null;
+  const releaseDownload = () => {
+    if (downloadUrl) URL.revokeObjectURL(downloadUrl);
+    downloadUrl = null;
+    downloadLink.removeAttribute('href');
+    downloadLink.hidden = true;
+    downloadStatus.hidden = true;
+    window.removeEventListener('hashchange', releaseDownload);
+    window.removeEventListener('pagehide', releaseDownload);
+  };
+  const downloadButton = button('Download High-Res PNG Card', {
+    variant: 'primary',
+    onClick: async () => {
+      downloadButton.disabled = true;
+      try {
+        const blob = await createInvitationPng(ev, getDraftFromForm());
+        releaseDownload();
+        downloadUrl = URL.createObjectURL(blob);
+        downloadLink.href = downloadUrl;
+        downloadLink.hidden = false;
+        window.addEventListener('hashchange', releaseDownload, { once: true });
+        window.addEventListener('pagehide', releaseDownload, { once: true });
+        downloadLink.click();
+        downloadStatus.textContent = 'PNG ready. If your download did not start, click “Save PNG to device” and check your browser’s downloads.';
+        downloadStatus.hidden = false;
+        announce(downloadStatus.textContent);
+      } catch (err) {
+        showBanner(err instanceof Error ? err.message : 'Could not download the invitation. Please try again.');
+      } finally {
+        downloadButton.disabled = false;
+      }
+    },
+  });
 
   const designForm = formView({
     fields,
@@ -1314,13 +1360,8 @@ export async function invitationSection(ev) {
         h(
           'div',
           { class: 'actions' },
-          button('Download High-Res PNG Card', {
-            variant: 'primary',
-            onClick: async () => {
-              await downloadInvitationPng(ev, getDraftFromForm());
-              announce('Invitation PNG card downloaded.');
-            },
-          }),
+          downloadButton,
+          downloadLink,
           aiStatus.available
             ? button('Generate with AI', {
                 variant: 'secondary',
@@ -1333,6 +1374,7 @@ export async function invitationSection(ev) {
               })
             : null,
         ),
+        downloadStatus,
         aiPromptBox,
       ),
       h('div', null, h('h3', null, 'Customize Card & Wording'), saveBanner, designForm),

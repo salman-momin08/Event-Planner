@@ -15,6 +15,14 @@ docker-compose.yml       optional local PostgreSQL 16 service bound to 127.0.0.1
 - **AI (optional):** Gemini, OpenAI-compatible endpoints, or Hugging Face models orchestrated by LangGraph with input/image guardrails and schema validation before persistence. Amounts and dates are computed deterministically by the application.
 - **Frontend:** vanilla ES modules; FastAPI serves `frontend/` directly at `/` in production, while Vite is used only for local frontend development.
 
+## Invitation Cards
+
+**Save invitation card** stores the editable design in your account. **Download High-Res PNG Card**
+exports the current design, including unsaved edits, as a 1200 x 1600 PNG to your device.
+If the browser blocks the automatic download, click the **Save PNG to device** link that appears
+after the image is generated. Check your browser's Downloads list for the file; the browser controls
+the destination folder. Export failures display an error instead of claiming the file was saved.
+
 ## Local Development
 Requires Python 3.12+ and Node.js `^20.19.0 || ^22.13.0 || >=24`.
 
