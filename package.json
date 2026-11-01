@@ -11,6 +11,7 @@
     "dev": "concurrently -k -n backend,frontend -c blue,green \"npm:dev:backend\" \"npm:dev:frontend\"",
     "dev:backend": "cd backend && ..\\.venv\\Scripts\\python.exe -m app",
     "dev:frontend": "vite",
+    "build": "vite build",
     "lint": "eslint frontend",
     "lint:fix": "eslint frontend --fix",
     "format": "prettier --check \"frontend/**/*.{js,css,html}\"",
