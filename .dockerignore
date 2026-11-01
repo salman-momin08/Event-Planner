@@ -2,6 +2,7 @@
 !Dockerfile
 !backend/
 !backend/requirements.txt
+!backend/index.py
 !backend/app/
 !backend/app/**
 !frontend/

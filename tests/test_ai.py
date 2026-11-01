@@ -469,18 +469,17 @@ def test_invitation_ai_failure_preserves_saved_data(make_app, failure):
 def test_postgres_planning_smoke(make_app):
     import os
     import uuid
-    from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
     import psycopg
     from psycopg import sql
+    from app.db import _normalize_pg_dsn
 
     dsn = os.environ.get("PLANNER_TEST_POSTGRES_URL", "")
     if not dsn:
         pytest.skip("Set PLANNER_TEST_POSTGRES_URL to a disposable PostgreSQL test database")
     schema = "planner_test_" + uuid.uuid4().hex
-    parsed = urlsplit(dsn)
-    query = parse_qsl(parsed.query) + [("options", f"-c search_path={schema}")]
-    isolated_dsn = urlunsplit(parsed._replace(query=urlencode(query)))
-    with psycopg.connect(dsn, autocommit=True, connect_timeout=10) as admin:
+    sep = "&" if "?" in dsn else "?"
+    isolated_dsn = f"{dsn}{sep}options=-c%20search_path%3D{schema}"
+    with psycopg.connect(_normalize_pg_dsn(dsn), autocommit=True, connect_timeout=10) as admin:
         admin.execute(sql.SQL("CREATE SCHEMA {}").format(sql.Identifier(schema)))
         try:
             app, c, ev, base, _ = setup(make_app, env={"DATABASE_URL": isolated_dsn})

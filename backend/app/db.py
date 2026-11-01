@@ -419,7 +419,7 @@ def _normalize_pg_dsn(dsn: str, *, decode_percent: bool = False) -> str:
     query = parse_qsl(parsed.query, keep_blank_values=True)
     if parsed.hostname not in {"localhost", "127.0.0.1", "::1"} and not any(key == "sslmode" for key, _ in query):
         query.append(("sslmode", "require"))
-    return urlunsplit(parsed._replace(query=urlencode(query)))
+    return urlunsplit(parsed._replace(query=urlencode(query, quote_via=quote)))
 
 
 class PgCursorAdapter:
