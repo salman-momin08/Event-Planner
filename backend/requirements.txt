@@ -7,4 +7,4 @@ psycopg[binary]==3.2.13
 langchain-core==1.6.12
 langchain-huggingface==1.2.3
 langgraph==1.2.16
-huggingface_hub==1.33.0
+huggingface_hub==2.4.0
