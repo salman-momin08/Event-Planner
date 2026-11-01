@@ -42,9 +42,11 @@ def test_074_index_has_language_viewport_skip_link_landmarks_and_live_region():
     assert 'role="status"' in html and 'aria-live="polite"' in html
 
 
-def test_074b_css_reduced_motion_and_focus_visible():
+def test_074b_css_reduced_motion_forced_colors_increased_contrast_and_focus_visible():
     css = (PUBLIC / "styles.css").read_text(encoding="utf-8")
     assert "prefers-reduced-motion" in css and ":focus-visible" in css
+    assert "forced-colors: active" in css
+    assert "prefers-contrast: more" in css
 
 
 def _rel_luminance(hex_color: str) -> float:

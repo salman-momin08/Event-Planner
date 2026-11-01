@@ -5,10 +5,13 @@ AI-assisted planner for weddings, birthdays and community events: events, budget
 ```
 backend/                 FastAPI app (backend/app), requirements*.txt, .env.example
 frontend/                framework-free accessible HTML/JS/CSS, served by the backend
+frontend/views/studio/   decoration & invitation studios: themes, image upload, SVG motifs,
+                         PNG export, live preview, and section views as focused modules
 tests/                   pytest, Vitest, and Playwright suites (excluded from the container image)
 Dockerfile               non-root production image containing only backend/app and frontend
 compose.production.yml   hardened single-instance production service definition
 docker-compose.yml       optional local PostgreSQL 16 service bound to 127.0.0.1
+SECURITY.md              vulnerability reporting policy and security posture summary
 ```
 
 - **Backend:** Python 3.12+, FastAPI, Pydantic, PostgreSQL (`DATABASE_URL`) or SQLite (`DATABASE_PATH`, WAL mode).
@@ -38,13 +41,16 @@ cd backend
 ## Release Checks
 
 ```powershell
-.\.venv\Scripts\python -m pytest          # Python suite (API, AI workflow, static frontend checks)
-npm run test:unit                         # Vitest + jsdom: dom.js helpers, XSS safety, form validation
+.\.venv\Scripts\python -m pytest          # Python suite (API, AI workflow, static frontend checks) + branch coverage report
+npm run test:unit                         # Vitest + jsdom: dom.js helpers, studio modules, XSS safety, form validation + coverage
 npm run test:a11y                         # Playwright + axe-core: WCAG 2.2 AA on the real rendered UI
 npm run lint && npm run format            # ESLint + Prettier (frontend)
 npm run audit:backend                     # pip-audit on backend/requirements.txt
 npm run audit                             # npm audit on frontend tooling
 ```
+
+Both test suites emit coverage reports (pytest-cov term-missing with branch coverage for
+`backend/app`, V8 coverage for `frontend/`) on every run, locally and in CI.
 
 `test:a11y` installs browsers once with `npx playwright install chromium` and boots the backend itself
 with an isolated temporary SQLite database. Set `PLANNER_TEST_POSTGRES_URL` to a disposable PostgreSQL

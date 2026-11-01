@@ -5,7 +5,8 @@ import { eventsListView, exportSection, newEventView, overviewSection } from './
 import { budgetSection } from './views/budget.js';
 import { tasksSection, timelineSection, vendorsSection } from './views/planning.js';
 import { aiSection } from './views/ai.js';
-import { decorSection, invitationSection } from './views/studio.js';
+import { decorSection } from './views/studio/decor.js';
+import { invitationSection } from './views/studio/invitation.js';
 
 const state = { user: null };
 const main = document.getElementById('main');

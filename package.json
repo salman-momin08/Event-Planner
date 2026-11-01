@@ -19,7 +19,7 @@
     "setup:backend": "python -m pip install -r backend/requirements-dev.txt",
     "setup": "npm install && npm run setup:backend",
     "test": "python -m pytest",
-    "test:unit": "vitest run",
+    "test:unit": "vitest run --coverage",
     "test:a11y": "playwright test",
     "audit": "npm audit",
     "audit:backend": "python -m pip_audit -r backend/requirements.txt"
@@ -28,6 +28,7 @@
     "@axe-core/playwright": "^4.14.0",
     "@eslint/js": "^10.0.0",
     "@playwright/test": "^1.64.1",
+    "@vitest/coverage-v8": "^5.0.5",
     "concurrently": "^9.0.0",
     "eslint": "^10.14.0",
     "globals": "^15.0.0",

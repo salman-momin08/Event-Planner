@@ -7,5 +7,12 @@ export default defineConfig({
     environment: 'jsdom',
     include: ['tests/frontend/**/*.test.js'],
     globals: false,
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'lcov'],
+      include: ['frontend/**/*.js'],
+      // api.js is a thin fetch wrapper exercised end-to-end by the Playwright a11y suite.
+      exclude: ['frontend/api.js'],
+    },
   },
 });

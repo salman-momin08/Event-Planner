@@ -1448,6 +1448,23 @@ progress::-moz-progress-bar {
   }
 }
 
+/* Users who request more contrast get stronger text, borders and focus rings. */
+@media (prefers-contrast: more) {
+  :root {
+    --muted: var(--text);
+  }
+  .card,
+  .facts,
+  .table-wrap,
+  .field-control {
+    border-width: 2px;
+  }
+  :focus-visible {
+    outline-width: 3px;
+    outline-offset: 3px;
+  }
+}
+
 /* ======================================================================
    Flourish layer: animations & polish. Every effect here is purely
    decorative and is switched off by the prefers-reduced-motion block
